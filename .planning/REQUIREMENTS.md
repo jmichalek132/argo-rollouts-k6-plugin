@@ -10,14 +10,14 @@
 - [ ] **PLUG-01**: Metric plugin binary implements full `RpcMetricProvider` interface (`InitPlugin`, `Run`, `Resume`, `Terminate`, `GarbageCollect`, `Type`, `GetMetadata`)
 - [ ] **PLUG-02**: Step plugin binary implements full `RpcStep` interface (`Run`, `Terminate`, `Abort`, `Type`)
 - [ ] **PLUG-03**: Both binaries register via `argo-rollouts-config` ConfigMap with name, location (GitHub Releases URL), and SHA256 checksum
-- [ ] **PLUG-04**: Internal provider abstraction interface (`Provider`) with unified 4-method design: `Name() string`, `TriggerRun(ctx, cfg)`, `GetRunResult(ctx, cfg, runID)`, `StopRun(ctx, cfg, runID)` — `GetRunResult` returns all metrics + state in one struct; Grafana Cloud k6 is the only v1 implementation
+- [x] **PLUG-04**: Internal provider abstraction interface (`Provider`) with unified 4-method design: `Name() string`, `TriggerRun(ctx, cfg)`, `GetRunResult(ctx, cfg, runID)`, `StopRun(ctx, cfg, runID)` — `GetRunResult` returns all metrics + state in one struct; Grafana Cloud k6 is the only v1 implementation
 
 ### Grafana Cloud Provider
 
-- [ ] **PROV-01**: Authenticate to Grafana Cloud k6 API using API token + stack ID, sourced from Kubernetes Secret via `secretKeyRef` in AnalysisTemplate args
-- [ ] **PROV-02**: Trigger a k6 test run by test ID (`POST /loadtests/v2/tests/{id}/start-testrun`) and return the resulting test run ID
-- [ ] **PROV-03**: Poll test run status (`GET /loadtests/v2/test_runs/{id}`) to determine running vs terminal state
-- [ ] **PROV-04**: Stop a running k6 test run (`POST /loadtests/v2/test_runs/{id}/stop`) when requested
+- [x] **PROV-01**: Authenticate to Grafana Cloud k6 API using API token + stack ID, sourced from Kubernetes Secret via `secretKeyRef` in AnalysisTemplate args
+- [x] **PROV-02**: Trigger a k6 test run by test ID (`POST /loadtests/v2/tests/{id}/start-testrun`) and return the resulting test run ID
+- [x] **PROV-03**: Poll test run status (`GET /loadtests/v2/test_runs/{id}`) to determine running vs terminal state
+- [x] **PROV-04**: Stop a running k6 test run (`POST /loadtests/v2/test_runs/{id}/stop`) when requested
 
 ### Metrics (Metric Plugin)
 
@@ -95,11 +95,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLUG-01 | Phase 2 | Pending |
 | PLUG-02 | Phase 3 | Pending |
 | PLUG-03 | Phase 4 | Pending |
-| PLUG-04 | Phase 1 | Pending |
-| PROV-01 | Phase 1 | Pending |
-| PROV-02 | Phase 1 | Pending |
-| PROV-03 | Phase 1 | Pending |
-| PROV-04 | Phase 1 | Pending |
+| PLUG-04 | Phase 1 | Complete |
+| PROV-01 | Phase 1 | Complete |
+| PROV-02 | Phase 1 | Complete |
+| PROV-03 | Phase 1 | Complete |
+| PROV-04 | Phase 1 | Complete |
 | METR-01 | Phase 2 | Pending |
 | METR-02 | Phase 2 | Pending |
 | METR-03 | Phase 2 | Pending |

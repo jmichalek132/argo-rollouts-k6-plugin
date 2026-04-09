@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Go module, Provider interface, types, and fully tested Grafana Cloud k6 provider implementation
+- [x] 01-01-PLAN.md -- Go module, Provider interface, types, and fully tested Grafana Cloud k6 provider implementation
 - [ ] 01-02-PLAN.md -- Binary stubs with go-plugin handshake, Makefile build pipeline, golangci-lint v2 config
 
 ### Phase 2: Metric Plugin
