@@ -28,12 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Both binaries write all output to stderr only -- running them produces no stdout before go-plugin handshake
   3. The Grafana Cloud provider can authenticate, trigger a test run by ID, poll run status to terminal state, and stop a running test -- verified by unit tests against a mock HTTP server
   4. The Provider interface is defined in `internal/provider/provider.go` with TriggerRun, GetRunResult, StopRun, and Name methods
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md -- Go module, Provider interface, types, and fully tested Grafana Cloud k6 provider implementation
+- [ ] 01-02-PLAN.md -- Binary stubs with go-plugin handshake, Makefile build pipeline, golangci-lint v2 config
 
 ### Phase 2: Metric Plugin
 **Goal**: The metric plugin binary implements the full RpcMetricProvider interface, returning k6 threshold pass/fail, HTTP error rate, latency percentiles, and throughput as AnalysisRun measurement values
@@ -90,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Provider | 0/3 | Not started | - |
+| 1. Foundation & Provider | 0/2 | Planning complete | - |
 | 2. Metric Plugin | 0/2 | Not started | - |
 | 3. Step Plugin | 0/2 | Not started | - |
 | 4. Release & Examples | 0/3 | Not started | - |
