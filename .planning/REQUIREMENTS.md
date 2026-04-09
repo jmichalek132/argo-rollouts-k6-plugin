@@ -37,10 +37,10 @@
 
 ### Build & Distribution
 
-- [ ] **DIST-01**: Two statically linked Go binaries: `metric-plugin` and `step-plugin`, both CGO-disabled (`CGO_ENABLED=0`)
+- [x] **DIST-01**: Two statically linked Go binaries: `metric-plugin` and `step-plugin`, both CGO-disabled (`CGO_ENABLED=0`)
 - [ ] **DIST-02**: goreleaser configuration produces multi-arch binaries (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64) with SHA256 checksums
 - [ ] **DIST-03**: GitHub Actions CI: lint (`golangci-lint`), test (`go test -race`), build on PR and push; release on tag
-- [ ] **DIST-04**: All plugin output to stderr only -- stdout reserved for hashicorp/go-plugin handshake protocol
+- [x] **DIST-04**: All plugin output to stderr only -- stdout reserved for hashicorp/go-plugin handshake protocol
 
 ### Examples & Documentation
 
@@ -110,10 +110,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STEP-03 | Phase 3 | Pending |
 | STEP-04 | Phase 3 | Pending |
 | STEP-05 | Phase 3 | Pending |
-| DIST-01 | Phase 1 | Pending |
+| DIST-01 | Phase 1 | Complete |
 | DIST-02 | Phase 4 | Pending |
 | DIST-03 | Phase 4 | Pending |
-| DIST-04 | Phase 1 | Pending |
+| DIST-04 | Phase 1 | Complete |
 | EXAM-01 | Phase 4 | Pending |
 | EXAM-02 | Phase 4 | Pending |
 | EXAM-03 | Phase 4 | Pending |
