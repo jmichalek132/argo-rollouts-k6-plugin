@@ -24,12 +24,12 @@ An open-source Argo Rollouts plugin written in Go that integrates k6 load testin
 |------------|---------|---------|-----|
 | Go | 1.23+ | Plugin language | Argo Rollouts plugins communicate via `net/rpc` (gob encoding) -- must be Go. The controller's go.mod uses Go 1.26.1, but the plugin is a separate binary; Go 1.23 is the minimum to match the k6 client library |
 | `github.com/argoproj/argo-rollouts` | v1.9.0 | Plugin interface types | Latest stable (released 2026-03-20). Provides `v1alpha1` CRD types, `utils/plugin/types` (RpcMetricProvider, RpcStep interfaces), and `metricproviders/plugin/rpc` / `rollout/steps/plugin/rpc` RPC wrappers |
-| `github.com/hashicorp/go-plugin` | v1.7.0 | Plugin host framework | Argo Rollouts v1.9.0 uses this version. Provides the process management, handshake, and `net/rpc` transport between controller and plugin binary |
+| `github.com/hashicorp/go-plugin` | v1.6.3 | Plugin host framework | Argo Rollouts v1.9.0 uses this version (verified from go.mod). Provides the process management, handshake, and `net/rpc` transport between controller and plugin binary |
 | `github.com/grafana/k6-cloud-openapi-client-go` | v1.7.0-0.1.0 | Grafana Cloud k6 API client | Official auto-generated Go client for the k6 Cloud REST API v6. Type-safe, covers all endpoints (LoadTests, TestRuns, Metrics). Released 2025-10-22 |
 ### Supporting Libraries
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `github.com/sirupsen/logrus` | v1.9.x | Structured logging | All plugin logging. Convention from every official Argo Rollouts plugin sample |
+| `log/slog` | stdlib (Go 1.21+) | Structured logging | All plugin logging — JSON handler to stderr. **D-12 locked decision overrides ecosystem logrus convention.** Zero external deps; Go 1.24 target makes slog available. |
 | `encoding/json` | stdlib | Config parsing | Parsing `metric.Provider.Plugin["plugin-name"]` config from AnalysisTemplate and `context.Config` from Rollout step |
 | `github.com/stretchr/testify` | v1.9.x | Test assertions | Unit and integration tests |
 | `sigs.k8s.io/e2e-framework` | v0.4.x | E2E test framework | Integration tests against kind cluster |
@@ -88,7 +88,7 @@ An open-source Argo Rollouts plugin written in Go that integrates k6 load testin
 |----------|-------------|-------------|---------|
 | k6 API client | `k6-cloud-openapi-client-go` | Raw `net/http` + manual JSON | Official client is auto-generated from OpenAPI spec, type-safe, handles auth, maintained by Grafana. No reason to DIY |
 | Plugin protocol | `net/rpc` (as Argo Rollouts requires) | gRPC | Argo Rollouts uses `net/rpc` exclusively for plugins. `go-plugin` supports gRPC but Argo Rollouts does not use it. Must use `net/rpc` |
-| Logging | logrus | zerolog, slog | Every Argo Rollouts plugin sample uses logrus. Consistency with ecosystem matters more than logger performance |
+| Logging | log/slog (stdlib) | logrus, zerolog | D-12 locked decision: slog has zero external deps, outputs structured JSON to stderr, available since Go 1.21. Ecosystem uses logrus but D-12 explicitly chose slog. |
 | Build tool | GoReleaser | Manual `go build` scripts | GoReleaser handles cross-compilation, checksums, GitHub Release uploads in one config file |
 | Testing framework | testify + e2e-framework | Go stdlib testing | testify for assertions/mocking, e2e-framework for kind cluster lifecycle. Standard in the Kubernetes ecosystem |
 | Binary count | Two binaries (metric + step) | Single binary with env var dispatch | Two binaries is explicit, matches Argo Rollouts conventions. Single binary requires runtime detection via `ARGO_ROLLOUTS_RPC_PLUGIN` env var which is an implementation detail of go-plugin, not a public API |

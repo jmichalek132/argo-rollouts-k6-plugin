@@ -10,7 +10,7 @@
 - [ ] **PLUG-01**: Metric plugin binary implements full `RpcMetricProvider` interface (`InitPlugin`, `Run`, `Resume`, `Terminate`, `GarbageCollect`, `Type`, `GetMetadata`)
 - [ ] **PLUG-02**: Step plugin binary implements full `RpcStep` interface (`Run`, `Terminate`, `Abort`, `Type`)
 - [ ] **PLUG-03**: Both binaries register via `argo-rollouts-config` ConfigMap with name, location (GitHub Releases URL), and SHA256 checksum
-- [ ] **PLUG-04**: Internal provider abstraction interface (`Provider`) with `TriggerRun`, `GetRunStatus`, `GetMetrics`, `GetThresholds`, `StopRun` -- Grafana Cloud k6 is the only v1 implementation
+- [ ] **PLUG-04**: Internal provider abstraction interface (`Provider`) with unified 4-method design: `Name() string`, `TriggerRun(ctx, cfg)`, `GetRunResult(ctx, cfg, runID)`, `StopRun(ctx, cfg, runID)` — `GetRunResult` returns all metrics + state in one struct; Grafana Cloud k6 is the only v1 implementation
 
 ### Grafana Cloud Provider
 
