@@ -2,7 +2,11 @@ package cloud
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"strconv"
 
+	k6 "github.com/grafana/k6-cloud-openapi-client-go/k6"
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
 )
 
@@ -38,17 +42,115 @@ func (p *GrafanaCloudProvider) Name() string {
 	return "grafana-cloud-k6"
 }
 
-// TriggerRun starts a new k6 test run.
+// newK6Client creates a configured k6 API client with auth from the PluginConfig.
+// Per D-07: stateless, creates client per call.
+func (p *GrafanaCloudProvider) newK6Client(ctx context.Context, cfg *provider.PluginConfig) (context.Context, *k6.APIClient) {
+	k6Cfg := k6.NewConfiguration()
+	if p.baseURL != "" {
+		k6Cfg.Servers = k6.ServerConfigurations{{URL: p.baseURL}}
+	}
+	client := k6.NewAPIClient(k6Cfg)
+	// Auth: Bearer token via context key (research finding #4).
+	ctx = context.WithValue(ctx, k6.ContextAccessToken, cfg.APIToken)
+	return ctx, client
+}
+
+// TriggerRun starts a new k6 test run. Returns the run ID as a string.
 func (p *GrafanaCloudProvider) TriggerRun(ctx context.Context, cfg *provider.PluginConfig) (string, error) {
-	panic("not implemented")
+	testID, err := strconv.ParseInt(cfg.TestID, 10, 32)
+	if err != nil {
+		return "", fmt.Errorf("invalid testId %q: %w", cfg.TestID, err)
+	}
+	stackID, err := strconv.ParseInt(cfg.StackID, 10, 32)
+	if err != nil {
+		return "", fmt.Errorf("invalid stackId %q: %w", cfg.StackID, err)
+	}
+
+	ctx, client := p.newK6Client(ctx, cfg)
+
+	testRun, _, err := client.LoadTestsAPI.LoadTestsStart(ctx, int32(testID)).
+		XStackId(int32(stackID)).
+		Execute()
+	if err != nil {
+		return "", fmt.Errorf("trigger run for test %s: %w", cfg.TestID, err)
+	}
+
+	runID := strconv.FormatInt(int64(testRun.GetId()), 10)
+	slog.Debug("triggered test run",
+		"testId", cfg.TestID,
+		"runId", runID,
+		"provider", p.Name(),
+	)
+	return runID, nil
 }
 
 // GetRunResult returns current status and metrics for a run.
+// Returns partial metrics during active runs (State == Running).
 func (p *GrafanaCloudProvider) GetRunResult(ctx context.Context, cfg *provider.PluginConfig, runID string) (*provider.RunResult, error) {
-	panic("not implemented")
+	runIDInt, err := strconv.ParseInt(runID, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid runId %q: %w", runID, err)
+	}
+	stackID, err := strconv.ParseInt(cfg.StackID, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid stackId %q: %w", cfg.StackID, err)
+	}
+
+	ctx, client := p.newK6Client(ctx, cfg)
+
+	testRun, _, err := client.TestRunsAPI.TestRunsRetrieve(ctx, int32(runIDInt)).
+		XStackId(int32(stackID)).
+		Execute()
+	if err != nil {
+		return nil, fmt.Errorf("get run result for %s: %w", runID, err)
+	}
+
+	statusDetails := testRun.GetStatusDetails()
+	statusType := statusDetails.GetType()
+	result := testRun.Result.Get() // *string or nil
+
+	state := mapToRunState(statusType, result)
+
+	slog.Info("polled test run status",
+		"runId", runID,
+		"statusType", statusType,
+		"state", state,
+		"provider", p.Name(),
+	)
+
+	return &provider.RunResult{
+		State:            state,
+		TestRunURL:       fmt.Sprintf("https://app.k6.io/runs/%s", runID),
+		ThresholdsPassed: isThresholdPassed(result),
+		// HTTPReqFailed, HTTPReqDuration, HTTPReqs left at zero values:
+		// v6 API client does not expose aggregate metric endpoints (Phase 2 enhancement).
+	}, nil
 }
 
 // StopRun requests cancellation of a running test.
+// No-op if the run is already in a terminal state.
 func (p *GrafanaCloudProvider) StopRun(ctx context.Context, cfg *provider.PluginConfig, runID string) error {
-	panic("not implemented")
+	runIDInt, err := strconv.ParseInt(runID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid runId %q: %w", runID, err)
+	}
+	stackID, err := strconv.ParseInt(cfg.StackID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid stackId %q: %w", cfg.StackID, err)
+	}
+
+	ctx, client := p.newK6Client(ctx, cfg)
+
+	_, err = client.TestRunsAPI.TestRunsAbort(ctx, int32(runIDInt)).
+		XStackId(int32(stackID)).
+		Execute()
+	if err != nil {
+		return fmt.Errorf("stop run %s: %w", runID, err)
+	}
+
+	slog.Info("stopped test run",
+		"runId", runID,
+		"provider", p.Name(),
+	)
+	return nil
 }
