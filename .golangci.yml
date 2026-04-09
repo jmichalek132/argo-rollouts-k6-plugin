@@ -1,0 +1,32 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - noctx
+    - exhaustive
+    - misspell
+    - goconst
+    - unconvert
+    - forbidigo
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: "fmt\\.Print.*"
+          msg: "Use slog (writes to stderr) instead of fmt.Print (writes to stdout). stdout is reserved for go-plugin handshake."
+        - pattern: "os\\.Stdout"
+          msg: "stdout is reserved for go-plugin handshake. Use os.Stderr for output."
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+run:
+  go: "1.24"
+  timeout: 5m
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

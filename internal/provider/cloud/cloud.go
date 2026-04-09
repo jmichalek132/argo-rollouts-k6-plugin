@@ -68,9 +68,12 @@ func (p *GrafanaCloudProvider) TriggerRun(ctx context.Context, cfg *provider.Plu
 
 	ctx, client := p.newK6Client(ctx, cfg)
 
-	testRun, _, err := client.LoadTestsAPI.LoadTestsStart(ctx, int32(testID)).
+	testRun, resp, err := client.LoadTestsAPI.LoadTestsStart(ctx, int32(testID)).
 		XStackId(int32(stackID)).
 		Execute()
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	if err != nil {
 		return "", fmt.Errorf("trigger run for test %s: %w", cfg.TestID, err)
 	}
@@ -98,9 +101,12 @@ func (p *GrafanaCloudProvider) GetRunResult(ctx context.Context, cfg *provider.P
 
 	ctx, client := p.newK6Client(ctx, cfg)
 
-	testRun, _, err := client.TestRunsAPI.TestRunsRetrieve(ctx, int32(runIDInt)).
+	testRun, resp, err := client.TestRunsAPI.TestRunsRetrieve(ctx, int32(runIDInt)).
 		XStackId(int32(stackID)).
 		Execute()
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get run result for %s: %w", runID, err)
 	}
@@ -141,9 +147,12 @@ func (p *GrafanaCloudProvider) StopRun(ctx context.Context, cfg *provider.Plugin
 
 	ctx, client := p.newK6Client(ctx, cfg)
 
-	_, err = client.TestRunsAPI.TestRunsAbort(ctx, int32(runIDInt)).
+	resp, err := client.TestRunsAPI.TestRunsAbort(ctx, int32(runIDInt)).
 		XStackId(int32(stackID)).
 		Execute()
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	if err != nil {
 		return fmt.Errorf("stop run %s: %w", runID, err)
 	}

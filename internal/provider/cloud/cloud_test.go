@@ -34,7 +34,7 @@ func TestTriggerRun_Success(t *testing.T) {
 		assert.Equal(t, "12345", r.Header.Get("X-Stack-Id"))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"id":      99,
 			"test_id": 42,
 			"status":  "created",
@@ -86,7 +86,7 @@ func TestTriggerRun_APIError(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /cloud/v6/load_tests/{id}/start", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": "internal server error"}`))
+		_, _ = w.Write([]byte(`{"error": "internal server error"}`))
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -108,7 +108,7 @@ func testGetRunResultWithResponse(t *testing.T, responseBody map[string]interfac
 		assert.Equal(t, "12345", r.Header.Get("X-Stack-Id"))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(responseBody)
+		_ = json.NewEncoder(w).Encode(responseBody)
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -234,7 +234,7 @@ func TestAuth_BearerToken(t *testing.T) {
 	mux.HandleFunc("POST /cloud/v6/load_tests/{id}/start", func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(fullTestRunResponse("created", nil))
+		_ = json.NewEncoder(w).Encode(fullTestRunResponse("created", nil))
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -251,7 +251,7 @@ func TestAuth_StackIdHeader(t *testing.T) {
 	mux.HandleFunc("POST /cloud/v6/load_tests/{id}/start", func(w http.ResponseWriter, r *http.Request) {
 		capturedStackID = r.Header.Get("X-Stack-Id")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(fullTestRunResponse("created", nil))
+		_ = json.NewEncoder(w).Encode(fullTestRunResponse("created", nil))
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
