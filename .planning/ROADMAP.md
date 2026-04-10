@@ -48,7 +48,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md -- K6MetricProvider implementation with v5 aggregate metrics client and full TDD unit test suite
-- [ ] 02-02-PLAN.md -- Wire K6MetricProvider into metric-plugin binary and verify full build pipeline
+- [x] 02-02-PLAN.md -- Wire K6MetricProvider into metric-plugin binary and verify full build pipeline
 
 ### Phase 3: Step Plugin
 **Goal**: The step plugin binary triggers a Grafana Cloud k6 test run, polls until completion, and returns pass/fail based on k6 threshold results -- with graceful termination that stops orphaned cloud test runs
