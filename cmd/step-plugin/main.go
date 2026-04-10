@@ -12,6 +12,9 @@ import (
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/step"
 )
 
+// version is set at build time via LDFLAGS: -X main.version={{.Version}}
+var version = "dev"
+
 // handshakeConfig must match the argo-rollouts controller's step plugin client.
 // Source: github.com/argoproj/argo-rollouts/rollout/steps/plugin/client/client.go
 var handshakeConfig = goPlugin.HandshakeConfig{

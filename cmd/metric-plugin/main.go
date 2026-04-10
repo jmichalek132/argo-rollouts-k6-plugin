@@ -12,6 +12,9 @@ import (
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/cloud"
 )
 
+// version is set at build time via LDFLAGS: -X main.version={{.Version}}
+var version = "dev"
+
 // handshakeConfig must match the argo-rollouts controller's metric plugin client.
 // Source: github.com/argoproj/argo-rollouts/metricproviders/plugin/client/client.go
 var handshakeConfig = goPlugin.HandshakeConfig{
