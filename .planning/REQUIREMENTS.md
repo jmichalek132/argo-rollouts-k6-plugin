@@ -7,7 +7,7 @@
 
 ### Plugin Infrastructure
 
-- [ ] **PLUG-01**: Metric plugin binary implements full `RpcMetricProvider` interface (`InitPlugin`, `Run`, `Resume`, `Terminate`, `GarbageCollect`, `Type`, `GetMetadata`)
+- [x] **PLUG-01**: Metric plugin binary implements full `RpcMetricProvider` interface (`InitPlugin`, `Run`, `Resume`, `Terminate`, `GarbageCollect`, `Type`, `GetMetadata`)
 - [ ] **PLUG-02**: Step plugin binary implements full `RpcStep` interface (`Run`, `Terminate`, `Abort`, `Type`)
 - [ ] **PLUG-03**: Both binaries register via `argo-rollouts-config` ConfigMap with name, location (GitHub Releases URL), and SHA256 checksum
 - [x] **PLUG-04**: Internal provider abstraction interface (`Provider`) with unified 4-method design: `Name() string`, `TriggerRun(ctx, cfg)`, `GetRunResult(ctx, cfg, runID)`, `StopRun(ctx, cfg, runID)` — `GetRunResult` returns all metrics + state in one struct; Grafana Cloud k6 is the only v1 implementation
@@ -21,11 +21,11 @@
 
 ### Metrics (Metric Plugin)
 
-- [ ] **METR-01**: Return k6 threshold pass/fail as a boolean (`metric: thresholds`) -- primary pass/fail signal using k6's native threshold definitions
-- [ ] **METR-02**: Return HTTP error rate as a float 0.0-1.0 (`metric: http_req_failed`) -- fraction of failed requests
-- [ ] **METR-03**: Return HTTP latency percentiles in milliseconds (`metric: http_req_duration`, `aggregation: p50|p95|p99`)
-- [ ] **METR-04**: Return HTTP throughput as requests/second (`metric: http_reqs`, `aggregation: rate`)
-- [ ] **METR-05**: Return k6 Cloud test run URL and status in `Measurement.Metadata` for `kubectl get analysisrun -o yaml` debugging
+- [x] **METR-01**: Return k6 threshold pass/fail as a boolean (`metric: thresholds`) -- primary pass/fail signal using k6's native threshold definitions
+- [x] **METR-02**: Return HTTP error rate as a float 0.0-1.0 (`metric: http_req_failed`) -- fraction of failed requests
+- [x] **METR-03**: Return HTTP latency percentiles in milliseconds (`metric: http_req_duration`, `aggregation: p50|p95|p99`)
+- [x] **METR-04**: Return HTTP throughput as requests/second (`metric: http_reqs`, `aggregation: rate`)
+- [x] **METR-05**: Return k6 Cloud test run URL and status in `Measurement.Metadata` for `kubectl get analysisrun -o yaml` debugging
 
 ### Step Plugin
 
@@ -52,9 +52,9 @@
 
 ### Testing
 
-- [ ] **TEST-01**: Unit tests for config parsing, metric calculation, Run/Resume state management, error handling (>=80% coverage on internal packages)
+- [x] **TEST-01**: Unit tests for config parsing, metric calculation, Run/Resume state management, error handling (>=80% coverage on internal packages)
 - [ ] **TEST-02**: e2e integration tests against a kind cluster with real Argo Rollouts controller and mocked Grafana Cloud k6 API (mock server or VCR)
-- [ ] **TEST-03**: Concurrent AnalysisRun test -- verify multiple simultaneous metric plugin polls don't cross-contaminate state (`go test -race`)
+- [x] **TEST-03**: Concurrent AnalysisRun test -- verify multiple simultaneous metric plugin polls don't cross-contaminate state (`go test -race`)
 
 ## v2 Requirements
 
@@ -92,7 +92,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PLUG-01 | Phase 2 | Pending |
+| PLUG-01 | Phase 2 | Complete |
 | PLUG-02 | Phase 3 | Pending |
 | PLUG-03 | Phase 4 | Pending |
 | PLUG-04 | Phase 1 | Complete |
@@ -100,11 +100,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROV-02 | Phase 1 | Complete |
 | PROV-03 | Phase 1 | Complete |
 | PROV-04 | Phase 1 | Complete |
-| METR-01 | Phase 2 | Pending |
-| METR-02 | Phase 2 | Pending |
-| METR-03 | Phase 2 | Pending |
-| METR-04 | Phase 2 | Pending |
-| METR-05 | Phase 2 | Pending |
+| METR-01 | Phase 2 | Complete |
+| METR-02 | Phase 2 | Complete |
+| METR-03 | Phase 2 | Complete |
+| METR-04 | Phase 2 | Complete |
+| METR-05 | Phase 2 | Complete |
 | STEP-01 | Phase 3 | Pending |
 | STEP-02 | Phase 3 | Pending |
 | STEP-03 | Phase 3 | Pending |
@@ -119,9 +119,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXAM-03 | Phase 4 | Pending |
 | EXAM-04 | Phase 4 | Pending |
 | EXAM-05 | Phase 4 | Pending |
-| TEST-01 | Phase 2 | Pending |
+| TEST-01 | Phase 2 | Complete |
 | TEST-02 | Phase 4 | Pending |
-| TEST-03 | Phase 2 | Pending |
+| TEST-03 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 30 total

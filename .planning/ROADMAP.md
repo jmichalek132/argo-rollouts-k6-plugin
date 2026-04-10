@@ -47,7 +47,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- K6MetricProvider implementation with v5 aggregate metrics client and full TDD unit test suite
+- [x] 02-01-PLAN.md -- K6MetricProvider implementation with v5 aggregate metrics client and full TDD unit test suite
 - [ ] 02-02-PLAN.md -- Wire K6MetricProvider into metric-plugin binary and verify full build pipeline
 
 ### Phase 3: Step Plugin
