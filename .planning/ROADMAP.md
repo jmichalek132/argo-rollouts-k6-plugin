@@ -44,11 +44,11 @@ Plans:
   3. Measurement.Metadata contains k6 Cloud test run URL and status for debugging via `kubectl get analysisrun -o yaml`
   4. Unit tests cover config parsing, all metric calculations, Run/Resume state management, and error handling at >=80% coverage on internal packages
   5. Running `go test -race ./internal/...` passes -- concurrent AnalysisRun polls do not cross-contaminate state
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- K6MetricProvider implementation with v5 aggregate metrics client and full TDD unit test suite
+- [ ] 02-02-PLAN.md -- Wire K6MetricProvider into metric-plugin binary and verify full build pipeline
 
 ### Phase 3: Step Plugin
 **Goal**: The step plugin binary triggers a Grafana Cloud k6 test run, polls until completion, and returns pass/fail based on k6 threshold results -- with graceful termination that stops orphaned cloud test runs
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Provider | 0/2 | Planning complete | - |
-| 2. Metric Plugin | 0/2 | Not started | - |
+| 1. Foundation & Provider | 2/2 | Complete | 2026-04-09 |
+| 2. Metric Plugin | 0/2 | Planning complete | - |
 | 3. Step Plugin | 0/2 | Not started | - |
 | 4. Release & Examples | 0/3 | Not started | - |
