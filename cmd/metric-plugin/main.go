@@ -5,7 +5,11 @@ import (
 	"os"
 	"strings"
 
+	rolloutsPlugin "github.com/argoproj/argo-rollouts/metricproviders/plugin/rpc"
 	goPlugin "github.com/hashicorp/go-plugin"
+
+	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/metric"
+	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/cloud"
 )
 
 // handshakeConfig must match the argo-rollouts controller's metric plugin client.
@@ -20,12 +24,17 @@ func main() {
 	// Configure logging to stderr ONLY -- stdout reserved for go-plugin handshake (DIST-04).
 	setupLogging()
 
+	// Create provider and metric plugin implementation.
+	p := cloud.NewGrafanaCloudProvider()
+	impl := metric.New(p)
+
 	// Serve() prints handshake to stdout, then redirects os.Stdout to a pipe. // stdout-ok
 	// NOTHING must write to stdout before this line. // stdout-ok
-	// Phase 2 will add: "RpcMetricProviderPlugin": &rpc.RpcMetricProviderPlugin{Impl: impl}
 	goPlugin.Serve(&goPlugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,
-		Plugins:         map[string]goPlugin.Plugin{},
+		Plugins: map[string]goPlugin.Plugin{
+			"RpcMetricProviderPlugin": &rolloutsPlugin.RpcMetricProviderPlugin{Impl: impl},
+		},
 	})
 }
 
