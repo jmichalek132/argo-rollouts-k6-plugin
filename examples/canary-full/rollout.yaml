@@ -1,0 +1,69 @@
+# Complete canary workflow with k6 step plugin trigger + metric analysis gate.
+#
+# Flow:
+#   1. Route 20% traffic to canary
+#   2. Step plugin triggers a k6 Cloud test run and waits for pass/fail
+#   3. Metric analysis triggers an INDEPENDENT k6 run for threshold evaluation
+#   4. If both gates pass, promote to 50% then 100%
+#
+# IMPORTANT: The step plugin and metric plugin trigger independent k6 test runs
+# using the same testId. There is no run ID handoff between them.
+#
+# NOTE: The step plugin reads apiToken and stackId directly from the config JSON.
+# For production, store credentials in a Kubernetes Secret and use environment
+# variable substitution or an init container to inject them.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: canary-with-k6
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+        - name: my-app
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+  strategy:
+    canary:
+      steps:
+        # Step 1: Route 20% traffic to canary
+        - setWeight: 20
+        # Step 2: Run k6 load test as a gate (trigger + wait for pass/fail)
+        - plugin:
+            name: jmichalek132/k6-step
+            config:
+              testId: "<YOUR_TEST_ID>"
+              apiToken: "<YOUR_API_TOKEN>"
+              stackId: "<YOUR_STACK_ID>"
+              timeout: "10m"
+        # Step 3: Run metric analysis (triggers its own independent k6 run)
+        - analysis:
+            templates:
+              - templateName: k6-threshold-check
+            args:
+              - name: api-token
+                valueFrom:
+                  secretKeyRef:
+                    name: k6-cloud-credentials
+                    key: apiToken
+              - name: stack-id
+                valueFrom:
+                  secretKeyRef:
+                    name: k6-cloud-credentials
+                    key: stackId
+              - name: test-id
+                value: "<YOUR_TEST_ID>"
+        # Step 4: If both gates pass, promote to 50%
+        - setWeight: 50
+        - pause: {duration: 30s}
+        # Step 5: Full promotion
+        - setWeight: 100
