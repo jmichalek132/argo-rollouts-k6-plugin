@@ -1,0 +1,23 @@
+name: e2e
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build plugin binaries
+        run: CGO_ENABLED=0 make build
+      - name: Run e2e tests
+        run: go test -v -tags=e2e -count=1 ./e2e/...
