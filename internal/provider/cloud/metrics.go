@@ -54,7 +54,7 @@ func (p *GrafanaCloudProvider) QueryAggregateMetric(
 	if err != nil {
 		return 0, fmt.Errorf("v5 aggregate query: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
