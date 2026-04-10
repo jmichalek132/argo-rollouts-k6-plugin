@@ -59,11 +59,11 @@ Plans:
   2. Subsequent Run calls read runId from RpcStepContext.Status, poll run status, and return PhaseSuccessful (thresholds passed) or PhaseFailed (thresholds failed, timed out, or errored)
   3. The testRunId is available in RpcStepResult.Status so downstream metric plugins can consume it via AnalysisTemplate args
   4. Calling Terminate or Abort stops the active k6 Cloud test run via provider.StopRun -- no orphaned Grafana Cloud test runs
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- K6StepPlugin TDD implementation with full lifecycle tests and >=80% coverage
+- [ ] 03-02-PLAN.md -- Wire K6StepPlugin into step-plugin binary and verify full build pipeline
 
 ### Phase 4: Release & Examples
 **Goal**: The project is ready for community consumption -- e2e tests validate the full binary-loading path in a real cluster, example manifests demonstrate common workflows, and tagged releases produce multi-arch binaries with checksums
@@ -90,6 +90,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Provider | 2/2 | Complete | 2026-04-09 |
-| 2. Metric Plugin | 0/2 | Planning complete | - |
-| 3. Step Plugin | 0/2 | Not started | - |
+| 2. Metric Plugin | 2/2 | Complete | 2026-04-10 |
+| 3. Step Plugin | 0/2 | Planning complete | - |
 | 4. Release & Examples | 0/3 | Not started | - |
