@@ -124,13 +124,63 @@ func (p *GrafanaCloudProvider) GetRunResult(ctx context.Context, cfg *provider.P
 		"provider", p.Name(),
 	)
 
-	return &provider.RunResult{
+	runResult := &provider.RunResult{
 		State:            state,
 		TestRunURL:       fmt.Sprintf("https://app.k6.io/runs/%s", runID),
 		ThresholdsPassed: isThresholdPassed(result),
-		// HTTPReqFailed, HTTPReqDuration, HTTPReqs left at zero values:
-		// v6 API client does not expose aggregate metric endpoints (Phase 2 enhancement).
-	}, nil
+	}
+
+	// Populate aggregate metrics from v5 API for terminal Passed/Failed runs.
+	if state == provider.Passed || state == provider.Failed {
+		p.populateAggregateMetrics(ctx, cfg, runID, runResult)
+	}
+
+	return runResult, nil
+}
+
+// populateAggregateMetrics queries the v5 aggregate endpoint to fill in
+// HTTPReqFailed, HTTPReqDuration, and HTTPReqs on a RunResult.
+// Failures are logged at Warn level but do not cause GetRunResult to fail
+// (graceful degradation -- v6 status/thresholds are the primary data).
+func (p *GrafanaCloudProvider) populateAggregateMetrics(ctx context.Context, cfg *provider.PluginConfig, runID string, result *provider.RunResult) {
+	// http_req_failed rate
+	if val, err := p.QueryAggregateMetric(ctx, cfg, runID, AggregateMetricQuery{
+		MetricName: "http_req_failed",
+		QueryFunc:  "rate",
+	}); err != nil {
+		slog.Warn("v5 aggregate query failed", "metric", "http_req_failed", "runId", runID, "error", err)
+	} else {
+		result.HTTPReqFailed = val
+	}
+
+	// http_req_duration percentiles
+	for _, pct := range []struct {
+		quantile string
+		field    *float64
+	}{
+		{"0.50", &result.HTTPReqDuration.P50},
+		{"0.95", &result.HTTPReqDuration.P95},
+		{"0.99", &result.HTTPReqDuration.P99},
+	} {
+		if val, err := p.QueryAggregateMetric(ctx, cfg, runID, AggregateMetricQuery{
+			MetricName: "http_req_duration",
+			QueryFunc:  fmt.Sprintf("histogram_quantile(%s)", pct.quantile),
+		}); err != nil {
+			slog.Warn("v5 aggregate query failed", "metric", "http_req_duration", "quantile", pct.quantile, "runId", runID, "error", err)
+		} else {
+			*pct.field = val
+		}
+	}
+
+	// http_reqs rate
+	if val, err := p.QueryAggregateMetric(ctx, cfg, runID, AggregateMetricQuery{
+		MetricName: "http_reqs",
+		QueryFunc:  "rate",
+	}); err != nil {
+		slog.Warn("v5 aggregate query failed", "metric", "http_reqs", "runId", runID, "error", err)
+	} else {
+		result.HTTPReqs = val
+	}
 }
 
 // StopRun requests cancellation of a running test.
