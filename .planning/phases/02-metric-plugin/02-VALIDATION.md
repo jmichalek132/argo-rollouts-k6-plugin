@@ -1,9 +1,9 @@
 ---
 phase: 2
 slug: metric-plugin
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-09
 ---
 
@@ -77,4 +77,4 @@ created: 2026-04-09
 - [ ] Feedback latency < 10s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-04-09
