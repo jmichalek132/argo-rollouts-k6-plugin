@@ -63,7 +63,7 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md -- K6StepPlugin TDD implementation with full lifecycle tests and >=80% coverage
-- [ ] 03-02-PLAN.md -- Wire K6StepPlugin into step-plugin binary and verify full build pipeline
+- [x] 03-02-PLAN.md -- Wire K6StepPlugin into step-plugin binary and verify full build pipeline
 
 ### Phase 4: Release & Examples
 **Goal**: The project is ready for community consumption -- e2e tests validate the full binary-loading path in a real cluster, example manifests demonstrate common workflows, and tagged releases produce multi-arch binaries with checksums
