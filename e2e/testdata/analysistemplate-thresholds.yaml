@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: k6-threshold-e2e
+spec:
+  metrics:
+    - name: k6-thresholds
+      interval: 10s
+      count: 3
+      successCondition: "result == 1"
+      failureLimit: 0
+      provider:
+        plugin:
+          jmichalek132/k6:
+            testId: "123"
+            apiToken: "test-token"
+            stackId: "1"
+            metric: thresholds

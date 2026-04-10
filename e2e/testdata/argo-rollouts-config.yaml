@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argo-rollouts-config
+  namespace: argo-rollouts
+data:
+  metricProviderPlugins: |
+    - name: "jmichalek132/k6"
+      location: "file:///tmp/argo-rollouts/metric-plugin"
+  stepPlugins: |
+    - name: "jmichalek132/k6-step"
+      location: "file:///tmp/argo-rollouts/step-plugin"

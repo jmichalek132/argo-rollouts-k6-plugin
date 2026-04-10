@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: k6-step-e2e
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: k6-step-e2e
+  template:
+    metadata:
+      labels:
+        app: k6-step-e2e
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - plugin:
+            name: jmichalek132/k6-step
+            config:
+              testId: "456"
+              apiToken: "test-token"
+              stackId: "1"
+              timeout: "2m"
+        - setWeight: 100

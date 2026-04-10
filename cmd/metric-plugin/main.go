@@ -28,7 +28,11 @@ func main() {
 	setupLogging()
 
 	// Create provider and metric plugin implementation.
-	p := cloud.NewGrafanaCloudProvider()
+	var opts []cloud.Option
+	if baseURL := os.Getenv("K6_BASE_URL"); baseURL != "" {
+		opts = append(opts, cloud.WithBaseURL(baseURL))
+	}
+	p := cloud.NewGrafanaCloudProvider(opts...)
 	impl := metric.New(p)
 
 	// Serve() prints handshake to stdout, then redirects os.Stdout to a pipe. // stdout-ok
