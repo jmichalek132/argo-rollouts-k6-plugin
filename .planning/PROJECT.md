@@ -12,13 +12,12 @@ Rollouts automatically pass or roll back based on real load test results — no 
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Extensible provider interface: abstraction layer that allows adding in-cluster k6 Job execution and direct k6 binary invocation without breaking existing users — *Validated in Phase 1: foundation-provider*
+- [x] Metric plugin: polls Grafana Cloud k6 API on each AnalysisRun interval and returns configurable metric values (error rate, p95/p99 latency, k6 threshold result) — *Validated in Phase 2: metric-plugin*
+- [x] Step plugin: triggers a Grafana Cloud k6 test run by test ID, waits for completion, returns pass/fail — *Validated in Phase 3: step-plugin*
 
 ### Active
 
-- [ ] Metric plugin: polls Grafana Cloud k6 API on each AnalysisRun interval and returns configurable metric values (error rate, p95/p99 latency, k6 threshold result, custom metrics)
-- [ ] Step plugin: triggers a Grafana Cloud k6 test run by test ID, waits for completion, returns pass/fail
-- [ ] Extensible provider interface: abstraction layer that allows adding in-cluster k6 Job execution and direct k6 binary invocation without breaking existing users
 - [ ] Test script sourcing (v1): reference an existing Grafana Cloud k6 test by ID
 - [ ] Test script sourcing (v2): k6 .js script stored in a Kubernetes ConfigMap
 - [ ] Configurable metrics with sane defaults: HTTP error rate, response time percentiles (p95/p99), k6 threshold pass/fail, user-defined custom metrics
@@ -78,4 +77,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-09 after initial project definition*
+*Last updated: 2026-04-10 — Phase 3 complete: step plugin implemented and verified*
