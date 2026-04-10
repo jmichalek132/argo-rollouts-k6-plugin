@@ -75,12 +75,12 @@ Plans:
   3. README covers installation (ConfigMap setup, binary download), credential management (Secret YAML), and a quick-start walkthrough
   4. `goreleaser` produces linux/amd64, linux/arm64, darwin/amd64, darwin/arm64 binaries with SHA256 checksums; GitHub Actions CI runs lint, test, build on PR and release on tag
   5. Both binaries are registered in argo-rollouts-config ConfigMap with name, GitHub Releases URL, and SHA256 checksum
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
-- [ ] 04-03: TBD
+- [ ] 04-01-PLAN.md -- GoReleaser config, GitHub Actions CI/CD workflows, and version variable injection
+- [ ] 04-02-PLAN.md -- e2e tests with kind cluster, mock k6 API server, and 4 test scenarios
+- [ ] 04-03-PLAN.md -- Example YAML manifests, README, and CONTRIBUTING documentation
 
 ## Progress
 
@@ -92,4 +92,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Foundation & Provider | 2/2 | Complete | 2026-04-09 |
 | 2. Metric Plugin | 2/2 | Complete | 2026-04-10 |
 | 3. Step Plugin | 0/2 | Planning complete | - |
-| 4. Release & Examples | 0/3 | Not started | - |
+| 4. Release & Examples | 0/3 | Planning complete | - |
