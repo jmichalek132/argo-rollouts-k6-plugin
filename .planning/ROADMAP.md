@@ -62,7 +62,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- K6StepPlugin TDD implementation with full lifecycle tests and >=80% coverage
+- [x] 03-01-PLAN.md -- K6StepPlugin TDD implementation with full lifecycle tests and >=80% coverage
 - [ ] 03-02-PLAN.md -- Wire K6StepPlugin into step-plugin binary and verify full build pipeline
 
 ### Phase 4: Release & Examples

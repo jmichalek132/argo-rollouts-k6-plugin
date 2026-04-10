@@ -8,7 +8,7 @@
 ### Plugin Infrastructure
 
 - [x] **PLUG-01**: Metric plugin binary implements full `RpcMetricProvider` interface (`InitPlugin`, `Run`, `Resume`, `Terminate`, `GarbageCollect`, `Type`, `GetMetadata`)
-- [ ] **PLUG-02**: Step plugin binary implements full `RpcStep` interface (`Run`, `Terminate`, `Abort`, `Type`)
+- [x] **PLUG-02**: Step plugin binary implements full `RpcStep` interface (`Run`, `Terminate`, `Abort`, `Type`)
 - [ ] **PLUG-03**: Both binaries register via `argo-rollouts-config` ConfigMap with name, location (GitHub Releases URL), and SHA256 checksum
 - [x] **PLUG-04**: Internal provider abstraction interface (`Provider`) with unified 4-method design: `Name() string`, `TriggerRun(ctx, cfg)`, `GetRunResult(ctx, cfg, runID)`, `StopRun(ctx, cfg, runID)` — `GetRunResult` returns all metrics + state in one struct; Grafana Cloud k6 is the only v1 implementation
 
@@ -29,11 +29,11 @@
 
 ### Step Plugin
 
-- [ ] **STEP-01**: Accept `testId` (k6 Cloud test definition ID), `apiToken` (secretRef), `stackId` (secretRef), and `timeout` in step config
-- [ ] **STEP-02**: Trigger k6 Cloud test run, return `PhaseRunning` with `RequeueAfter`, poll on subsequent `Run` calls until terminal state
-- [ ] **STEP-03**: Return `testRunId` in `RpcStepResult.Status` so downstream metric plugin can consume it via AnalysisTemplate args
-- [ ] **STEP-04**: Return `PhaseSuccessful` if k6 thresholds passed, `PhaseFailed` if thresholds failed or test errored
-- [ ] **STEP-05**: Call `StopRun` on the active test run when `Terminate` or `Abort` is called -- no orphaned Grafana Cloud test runs
+- [x] **STEP-01**: Accept `testId` (k6 Cloud test definition ID), `apiToken` (secretRef), `stackId` (secretRef), and `timeout` in step config
+- [x] **STEP-02**: Trigger k6 Cloud test run, return `PhaseRunning` with `RequeueAfter`, poll on subsequent `Run` calls until terminal state
+- [x] **STEP-03**: Return `testRunId` in `RpcStepResult.Status` so downstream metric plugin can consume it via AnalysisTemplate args
+- [x] **STEP-04**: Return `PhaseSuccessful` if k6 thresholds passed, `PhaseFailed` if thresholds failed or test errored
+- [x] **STEP-05**: Call `StopRun` on the active test run when `Terminate` or `Abort` is called -- no orphaned Grafana Cloud test runs
 
 ### Build & Distribution
 
@@ -93,7 +93,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PLUG-01 | Phase 2 | Complete |
-| PLUG-02 | Phase 3 | Pending |
+| PLUG-02 | Phase 3 | Complete |
 | PLUG-03 | Phase 4 | Pending |
 | PLUG-04 | Phase 1 | Complete |
 | PROV-01 | Phase 1 | Complete |
@@ -105,11 +105,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | METR-03 | Phase 2 | Complete |
 | METR-04 | Phase 2 | Complete |
 | METR-05 | Phase 2 | Complete |
-| STEP-01 | Phase 3 | Pending |
-| STEP-02 | Phase 3 | Pending |
-| STEP-03 | Phase 3 | Pending |
-| STEP-04 | Phase 3 | Pending |
-| STEP-05 | Phase 3 | Pending |
+| STEP-01 | Phase 3 | Complete |
+| STEP-02 | Phase 3 | Complete |
+| STEP-03 | Phase 3 | Complete |
+| STEP-04 | Phase 3 | Complete |
+| STEP-05 | Phase 3 | Complete |
 | DIST-01 | Phase 1 | Complete |
 | DIST-02 | Phase 4 | Pending |
 | DIST-03 | Phase 4 | Pending |
