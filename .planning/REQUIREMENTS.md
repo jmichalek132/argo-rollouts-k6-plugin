@@ -44,11 +44,11 @@
 
 ### Examples & Documentation
 
-- [ ] **EXAM-01**: Example `AnalysisTemplate` for threshold-only gate (simplest pattern -- metric: thresholds)
-- [ ] **EXAM-02**: Example `AnalysisTemplate` for HTTP error rate + p95 latency combined
-- [ ] **EXAM-03**: Example `Rollout` showing step plugin (trigger) + metric analysis (gate) combined canary workflow
-- [ ] **EXAM-04**: README with: installation (ConfigMap setup, binary download), credential management (Secret YAML), quick-start walkthrough
-- [ ] **EXAM-05**: CLAUDE.md or CONTRIBUTING.md for contributors
+- [x] **EXAM-01**: Example `AnalysisTemplate` for threshold-only gate (simplest pattern -- metric: thresholds)
+- [x] **EXAM-02**: Example `AnalysisTemplate` for HTTP error rate + p95 latency combined
+- [x] **EXAM-03**: Example `Rollout` showing step plugin (trigger) + metric analysis (gate) combined canary workflow
+- [x] **EXAM-04**: README with: installation (ConfigMap setup, binary download), credential management (Secret YAML), quick-start walkthrough
+- [x] **EXAM-05**: CLAUDE.md or CONTRIBUTING.md for contributors
 
 ### Testing
 
@@ -114,11 +114,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIST-02 | Phase 4 | Complete |
 | DIST-03 | Phase 4 | Complete |
 | DIST-04 | Phase 1 | Complete |
-| EXAM-01 | Phase 4 | Pending |
-| EXAM-02 | Phase 4 | Pending |
-| EXAM-03 | Phase 4 | Pending |
-| EXAM-04 | Phase 4 | Pending |
-| EXAM-05 | Phase 4 | Pending |
+| EXAM-01 | Phase 4 | Complete |
+| EXAM-02 | Phase 4 | Complete |
+| EXAM-03 | Phase 4 | Complete |
+| EXAM-04 | Phase 4 | Complete |
+| EXAM-05 | Phase 4 | Complete |
 | TEST-01 | Phase 2 | Complete |
 | TEST-02 | Phase 4 | Pending |
 | TEST-03 | Phase 2 | Complete |
