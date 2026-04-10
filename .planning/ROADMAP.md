@@ -79,7 +79,7 @@ Plans:
 
 Plans:
 - [x] 04-01-PLAN.md -- GoReleaser config, GitHub Actions CI/CD workflows, and version variable injection
-- [ ] 04-02-PLAN.md -- e2e tests with kind cluster, mock k6 API server, and 4 test scenarios
+- [x] 04-02-PLAN.md -- e2e tests with kind cluster, mock k6 API server, and 4 test scenarios
 - [ ] 04-03-PLAN.md -- Example YAML manifests, README, and CONTRIBUTING documentation
 
 ## Progress

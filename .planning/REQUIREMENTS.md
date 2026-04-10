@@ -9,7 +9,7 @@
 
 - [x] **PLUG-01**: Metric plugin binary implements full `RpcMetricProvider` interface (`InitPlugin`, `Run`, `Resume`, `Terminate`, `GarbageCollect`, `Type`, `GetMetadata`)
 - [x] **PLUG-02**: Step plugin binary implements full `RpcStep` interface (`Run`, `Terminate`, `Abort`, `Type`)
-- [ ] **PLUG-03**: Both binaries register via `argo-rollouts-config` ConfigMap with name, location (GitHub Releases URL), and SHA256 checksum
+- [x] **PLUG-03**: Both binaries register via `argo-rollouts-config` ConfigMap with name, location (GitHub Releases URL), and SHA256 checksum
 - [x] **PLUG-04**: Internal provider abstraction interface (`Provider`) with unified 4-method design: `Name() string`, `TriggerRun(ctx, cfg)`, `GetRunResult(ctx, cfg, runID)`, `StopRun(ctx, cfg, runID)` — `GetRunResult` returns all metrics + state in one struct; Grafana Cloud k6 is the only v1 implementation
 
 ### Grafana Cloud Provider
@@ -53,7 +53,7 @@
 ### Testing
 
 - [x] **TEST-01**: Unit tests for config parsing, metric calculation, Run/Resume state management, error handling (>=80% coverage on internal packages)
-- [ ] **TEST-02**: e2e integration tests against a kind cluster with real Argo Rollouts controller and mocked Grafana Cloud k6 API (mock server or VCR)
+- [x] **TEST-02**: e2e integration tests against a kind cluster with real Argo Rollouts controller and mocked Grafana Cloud k6 API (mock server or VCR)
 - [x] **TEST-03**: Concurrent AnalysisRun test -- verify multiple simultaneous metric plugin polls don't cross-contaminate state (`go test -race`)
 
 ## v2 Requirements
@@ -94,7 +94,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | PLUG-01 | Phase 2 | Complete |
 | PLUG-02 | Phase 3 | Complete |
-| PLUG-03 | Phase 4 | Pending |
+| PLUG-03 | Phase 4 | Complete |
 | PLUG-04 | Phase 1 | Complete |
 | PROV-01 | Phase 1 | Complete |
 | PROV-02 | Phase 1 | Complete |
@@ -120,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXAM-04 | Phase 4 | Pending |
 | EXAM-05 | Phase 4 | Pending |
 | TEST-01 | Phase 2 | Complete |
-| TEST-02 | Phase 4 | Pending |
+| TEST-02 | Phase 4 | Complete |
 | TEST-03 | Phase 2 | Complete |
 
 **Coverage:**
