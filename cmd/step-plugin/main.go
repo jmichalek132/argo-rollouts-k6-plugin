@@ -5,7 +5,11 @@ import (
 	"os"
 	"strings"
 
+	stepRpc "github.com/argoproj/argo-rollouts/rollout/steps/plugin/rpc"
 	goPlugin "github.com/hashicorp/go-plugin"
+
+	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/cloud"
+	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/step"
 )
 
 // handshakeConfig must match the argo-rollouts controller's step plugin client.
@@ -20,12 +24,17 @@ func main() {
 	// Configure logging to stderr ONLY -- stdout reserved for go-plugin handshake (DIST-04).
 	setupLogging()
 
+	// Create provider and step plugin implementation.
+	p := cloud.NewGrafanaCloudProvider()
+	impl := step.New(p)
+
 	// Serve() prints handshake to stdout, then redirects os.Stdout to a pipe. // stdout-ok
 	// NOTHING must write to stdout before this line. // stdout-ok
-	// Phase 3 will add: "RpcStepPlugin": &stepRpc.RpcStepPlugin{Impl: impl}
 	goPlugin.Serve(&goPlugin.ServeConfig{
 		HandshakeConfig: handshakeConfig,
-		Plugins:         map[string]goPlugin.Plugin{},
+		Plugins: map[string]goPlugin.Plugin{
+			"RpcStepPlugin": &stepRpc.RpcStepPlugin{Impl: impl},
+		},
 	})
 }
 

@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	stepRpc "github.com/argoproj/argo-rollouts/rollout/steps/plugin/rpc"
 	"github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+	stepRpc "github.com/argoproj/argo-rollouts/rollout/steps/plugin/rpc"
 	"github.com/argoproj/argo-rollouts/utils/plugin/types"
 
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
