@@ -1,0 +1,24 @@
+# Simplest k6 metric plugin pattern: threshold-only gate.
+# The metric plugin triggers a k6 Cloud test run and polls the result.
+# successCondition: "result == 1" means all k6 thresholds passed.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: k6-threshold-check
+spec:
+  args:
+    - name: api-token
+    - name: stack-id
+    - name: test-id
+  metrics:
+    - name: k6-thresholds
+      interval: 30s
+      successCondition: "result == 1"
+      failureLimit: 0
+      provider:
+        plugin:
+          jmichalek132/k6:
+            testId: "{{args.test-id}}"
+            apiToken: "{{args.api-token}}"
+            stackId: "{{args.stack-id}}"
+            metric: thresholds

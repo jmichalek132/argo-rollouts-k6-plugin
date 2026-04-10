@@ -1,0 +1,45 @@
+# Combined error rate + p95 latency gate.
+# Two metrics in one AnalysisTemplate -- both must pass for the analysis to succeed.
+#
+# k6-error-rate: fraction of failed HTTP requests (0.0 = none, 1.0 = all)
+# k6-p95-latency: 95th percentile request duration in milliseconds
+#
+# Default thresholds: <= 1% error rate, <= 500ms p95 latency.
+# Override via args when creating the AnalysisRun.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: k6-error-rate-latency
+spec:
+  args:
+    - name: api-token
+    - name: stack-id
+    - name: test-id
+    - name: max-error-rate
+      value: "0.01"
+    - name: max-p95-ms
+      value: "500"
+  metrics:
+    - name: k6-error-rate
+      interval: 30s
+      successCondition: "asFloat(result) <= asFloat(args.max-error-rate)"
+      failureLimit: 0
+      provider:
+        plugin:
+          jmichalek132/k6:
+            testId: "{{args.test-id}}"
+            apiToken: "{{args.api-token}}"
+            stackId: "{{args.stack-id}}"
+            metric: http_req_failed
+    - name: k6-p95-latency
+      interval: 30s
+      successCondition: "asFloat(result) <= asFloat(args.max-p95-ms)"
+      failureLimit: 0
+      provider:
+        plugin:
+          jmichalek132/k6:
+            testId: "{{args.test-id}}"
+            apiToken: "{{args.api-token}}"
+            stackId: "{{args.stack-id}}"
+            metric: http_req_duration
+            aggregation: p95

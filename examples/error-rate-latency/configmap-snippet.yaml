@@ -1,0 +1,13 @@
+# Argo Rollouts ConfigMap snippet to register the k6 metric plugin.
+# Merge this into your existing argo-rollouts-config ConfigMap.
+# Replace <SHA256_FROM_CHECKSUMS_TXT> with the checksum from the release.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argo-rollouts-config
+  namespace: argo-rollouts
+data:
+  metricProviderPlugins: |
+    - name: "jmichalek132/k6"
+      location: "https://github.com/jmichalek132/argo-rollouts-k6-plugin/releases/download/v0.1.0/metric-plugin_linux_amd64"
+      sha256: "<SHA256_FROM_CHECKSUMS_TXT>"

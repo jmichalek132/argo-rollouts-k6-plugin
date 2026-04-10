@@ -1,0 +1,23 @@
+# Threshold-check AnalysisTemplate for the canary-full workflow.
+# Included here so the example is self-contained (same as threshold-gate example).
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: k6-threshold-check
+spec:
+  args:
+    - name: api-token
+    - name: stack-id
+    - name: test-id
+  metrics:
+    - name: k6-thresholds
+      interval: 30s
+      successCondition: "result == 1"
+      failureLimit: 0
+      provider:
+        plugin:
+          jmichalek132/k6:
+            testId: "{{args.test-id}}"
+            apiToken: "{{args.api-token}}"
+            stackId: "{{args.stack-id}}"
+            metric: thresholds
