@@ -80,3 +80,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+// k8s.io/kubelet has no tagged releases; replace directives don't propagate
+// from dependencies, so we must mirror the one from argo-rollouts' go.mod.
+replace k8s.io/kubelet => k8s.io/kubelet v0.34.1

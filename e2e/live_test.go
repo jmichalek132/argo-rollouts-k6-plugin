@@ -80,3 +80,114 @@ spec:
 
 	testenv.Test(t, f)
 }
+
+// TestLiveStepPlugin tests the step plugin against the real Grafana Cloud k6 API.
+// Requires K6_LIVE_TEST=true, K6_CLOUD_TOKEN, and K6_TEST_ID to be set.
+func TestLiveStepPlugin(t *testing.T) {
+	if os.Getenv("K6_LIVE_TEST") != "true" {
+		t.Skip("live test disabled (set K6_LIVE_TEST=true to enable)")
+	}
+
+	apiToken := os.Getenv("K6_CLOUD_TOKEN")
+	if apiToken == "" {
+		t.Fatal("K6_CLOUD_TOKEN env var is required for live tests")
+	}
+	testID := os.Getenv("K6_TEST_ID")
+	if testID == "" {
+		t.Fatal("K6_TEST_ID env var is required for live tests")
+	}
+	stackID := os.Getenv("K6_STACK_ID")
+	if stackID == "" {
+		stackID = "1313689"
+	}
+
+	f := features.New("live step plugin pass").
+		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			svcYAML := fmt.Sprintf(`apiVersion: v1
+kind: Service
+metadata:
+  name: k6-live-step-e2e
+  namespace: %s
+spec:
+  selector:
+    app: k6-live-step-e2e
+  ports:
+    - port: 80
+      targetPort: 80
+`, cfg.Namespace())
+			if err := kubectlApplyStdin(cfg, svcYAML); err != nil {
+				t.Fatalf("create Service: %v", err)
+			}
+
+			rolloutYAML := fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: k6-live-step-e2e
+  namespace: %s
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: k6-live-step-e2e
+  template:
+    metadata:
+      labels:
+        app: k6-live-step-e2e
+    spec:
+      containers:
+        - name: app
+          image: k6-plugin-binaries:e2e
+          imagePullPolicy: Never
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            runAsUser: 65534
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - plugin:
+            name: jmichalek132/k6-step
+            config:
+              testId: %q
+              apiToken: %q
+              stackId: %q
+              timeout: "10m"
+        - setWeight: 100
+`, cfg.Namespace(), testID, apiToken, stackID)
+			if err := kubectlApplyStdin(cfg, rolloutYAML); err != nil {
+				t.Fatalf("apply Rollout: %v", err)
+			}
+
+			// Wait for initial deploy (no canary steps on first deploy).
+			if _, err := waitForRolloutPhase(cfg, "k6-live-step-e2e", cfg.Namespace(), "Healthy", 2*time.Minute); err != nil {
+				t.Fatalf("initial rollout did not become Healthy: %v", err)
+			}
+
+			// Trigger update so canary steps execute.
+			if err := runKubectl(cfg, "patch", "rollout", "k6-live-step-e2e",
+				"-n", cfg.Namespace(), "--type=merge",
+				"-p", `{"spec":{"template":{"metadata":{"annotations":{"test/run":"2"}}}}}`); err != nil {
+				t.Fatalf("patch rollout to trigger update: %v", err)
+			}
+			return ctx
+		}).
+		Assess("rollout advances past step plugin against real k6 API", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			phase, err := waitForRolloutPhase(cfg, "k6-live-step-e2e", cfg.Namespace(), "Healthy", 10*time.Minute)
+			if err != nil {
+				t.Fatalf("wait for Rollout: %v", err)
+			}
+			if phase != "Healthy" {
+				t.Errorf("expected Rollout phase Healthy, got %s", phase)
+			}
+			return ctx
+		}).
+		Teardown(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			_ = runKubectl(cfg, "delete", "rollout", "k6-live-step-e2e", "-n", cfg.Namespace(), "--ignore-not-found")
+			_ = runKubectl(cfg, "delete", "service", "k6-live-step-e2e", "-n", cfg.Namespace(), "--ignore-not-found")
+			return ctx
+		}).
+		Feature()
+
+	testenv.Test(t, f)
+}
