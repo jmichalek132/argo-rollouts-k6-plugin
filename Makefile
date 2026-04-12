@@ -25,7 +25,8 @@ test-e2e-live:
 	K6_CLOUD_TOKEN=$(K6_CLOUD_TOKEN) \
 	K6_STACK_ID=$(K6_STACK_ID) \
 	K6_TEST_ID=$(K6_TEST_ID) \
-	go test -v -tags=e2e -count=1 -timeout=15m ./e2e/...
+	K6_FAILING_TEST_ID=$(K6_FAILING_TEST_ID) \
+	go test -v -tags=e2e -count=1 -timeout=30m ./e2e/...
 
 lint: lint-stdout
 	golangci-lint run
