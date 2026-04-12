@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -15,21 +16,11 @@ import (
 )
 
 func TestStepPluginPass(t *testing.T) {
+	if os.Getenv("K6_LIVE_TEST") == "true" {
+		t.Skip("mock test skipped in live mode")
+	}
 	f := features.New("step plugin pass").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			// Program mock: test 456 returns run 2001, which transitions Running -> Passed.
-			mockServer.OnTriggerRun("456", "2001")
-			mockServer.OnGetRunResult("2001",
-				testRunResponse{StatusText: "running", ResultText: nil},
-				testRunResponse{StatusText: "running", ResultText: nil},
-				testRunResponse{StatusText: "finished", ResultText: strPtr("passed")},
-			)
-			mockServer.OnAggregateMetrics("2001", &aggregateMetrics{
-				HTTPReqFailed:   0.0,
-				HTTPReqDuration: 100.0,
-				HTTPReqs:        1000.0,
-			})
-
 			// Create a minimal Service for the Rollout target.
 			svcYAML := fmt.Sprintf(`apiVersion: v1
 kind: Service
@@ -47,15 +38,28 @@ spec:
 				t.Fatalf("create Service: %v", err)
 			}
 
-			// Apply the Rollout with step plugin.
+			// Apply the Rollout for the first time (no canary steps on initial deploy).
 			if err := runKubectl(cfg, "apply", "-n", cfg.Namespace(),
-				"-f", "e2e/testdata/rollout-step.yaml"); err != nil {
+				"-f", "testdata/rollout-step.yaml"); err != nil {
 				t.Fatalf("apply Rollout: %v", err)
+			}
+
+			// Wait for initial deployment to become Healthy (no canary steps on first deploy).
+			if _, err := waitForRolloutPhase(cfg, "k6-step-e2e", cfg.Namespace(), "Healthy", 2*time.Minute); err != nil {
+				t.Fatalf("initial rollout did not become Healthy: %v", err)
+			}
+
+			// Trigger an update via annotation so canary steps execute this time.
+			if err := runKubectl(cfg, "patch", "rollout", "k6-step-e2e",
+				"-n", cfg.Namespace(), "--type=merge",
+				"-p", `{"spec":{"template":{"metadata":{"annotations":{"test/run":"2"}}}}}`); err != nil {
+				t.Fatalf("patch rollout to trigger update: %v", err)
 			}
 
 			return ctx
 		}).
 		Assess("rollout advances past step plugin", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			// Canary steps now run: step-pass-1 (testId "200") → runId 2001 → passes.
 			phase, err := waitForRolloutPhase(cfg, "k6-step-e2e", cfg.Namespace(), "Healthy", 3*time.Minute)
 			if err != nil {
 				t.Fatalf("wait for Rollout: %v", err)
@@ -76,15 +80,11 @@ spec:
 }
 
 func TestStepPluginFail(t *testing.T) {
+	if os.Getenv("K6_LIVE_TEST") == "true" {
+		t.Skip("mock test skipped in live mode")
+	}
 	f := features.New("step plugin fail").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			// Program mock: test 789 returns run 2002, which transitions Running -> Failed.
-			mockServer.OnTriggerRun("789", "2002")
-			mockServer.OnGetRunResult("2002",
-				testRunResponse{StatusText: "running", ResultText: nil},
-				testRunResponse{StatusText: "finished", ResultText: strPtr("failed")},
-			)
-
 			// Create a minimal Service for the Rollout target.
 			svcYAML := fmt.Sprintf(`apiVersion: v1
 kind: Service
@@ -102,7 +102,7 @@ spec:
 				t.Fatalf("create Service: %v", err)
 			}
 
-			// Create a Rollout that will fail.
+			// Initial rollout deploy (no canary steps on first deploy).
 			rolloutYAML := fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -120,10 +120,12 @@ spec:
         app: k6-step-fail-e2e
     spec:
       containers:
-        - name: nginx
-          image: nginx:1.27-alpine
-          ports:
-            - containerPort: 80
+        - name: app
+          image: k6-plugin-binaries:e2e
+          imagePullPolicy: Never
+          command: ["sh", "-c", "sleep 3600"]
+          securityContext:
+            runAsUser: 65534
   strategy:
     canary:
       steps:
@@ -131,7 +133,7 @@ spec:
         - plugin:
             name: jmichalek132/k6-step
             config:
-              testId: "789"
+              testId: "201"
               apiToken: "test-token"
               stackId: "1"
               timeout: "2m"
@@ -141,9 +143,22 @@ spec:
 				t.Fatalf("apply Rollout: %v", err)
 			}
 
+			// Wait for initial deployment to become Healthy.
+			if _, err := waitForRolloutPhase(cfg, "k6-step-fail-e2e", cfg.Namespace(), "Healthy", 2*time.Minute); err != nil {
+				t.Fatalf("initial rollout did not become Healthy: %v", err)
+			}
+
+			// Trigger an update via annotation so canary steps execute.
+			if err := runKubectl(cfg, "patch", "rollout", "k6-step-fail-e2e",
+				"-n", cfg.Namespace(), "--type=merge",
+				"-p", `{"spec":{"template":{"metadata":{"annotations":{"test/run":"2"}}}}}`); err != nil {
+				t.Fatalf("patch rollout to trigger update: %v", err)
+			}
+
 			return ctx
 		}).
 		Assess("rollout rolls back on step failure", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			// Canary steps now run: step-fail-1 (testId "201") → runId 2002 → fails → Degraded.
 			phase, err := waitForRolloutPhase(cfg, "k6-step-fail-e2e", cfg.Namespace(), "Degraded", 3*time.Minute)
 			if err != nil {
 				t.Fatalf("wait for Rollout: %v", err)
@@ -164,7 +179,7 @@ spec:
 }
 
 // waitForRolloutPhase polls the Rollout until it reaches the expected phase or times out.
-// For pass scenarios, expectedPhase is "Healthy". For fail scenarios, it is "Degraded".
+// Returns the final phase and nil on success, or the last phase and an error on timeout.
 func waitForRolloutPhase(cfg *envconf.Config, name, namespace, expectedPhase string, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -175,10 +190,6 @@ func waitForRolloutPhase(cfg *envconf.Config, name, namespace, expectedPhase str
 			continue
 		}
 		if phase == expectedPhase {
-			return phase, nil
-		}
-		// Also check for abort/error as terminal states.
-		if expectedPhase == "Degraded" && phase == "Degraded" {
 			return phase, nil
 		}
 		time.Sleep(3 * time.Second)

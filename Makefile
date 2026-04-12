@@ -2,7 +2,7 @@ MODULE := github.com/jmichalek132/argo-rollouts-k6-plugin
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build build-metric build-step test lint lint-stdout clean
+.PHONY: build build-metric build-step test test-e2e test-e2e-live lint lint-stdout clean
 
 build: build-metric build-step
 
@@ -14,6 +14,18 @@ build-step:
 
 test:
 	go test -race -v -count=1 ./...
+
+test-e2e:
+	GOPATH="$(HOME)/go" DOCKER_HOST="unix://$(HOME)/.colima/default/docker.sock" \
+	go test -v -tags=e2e -count=1 -timeout=15m ./e2e/...
+
+test-e2e-live:
+	GOPATH="$(HOME)/go" DOCKER_HOST="unix://$(HOME)/.colima/default/docker.sock" \
+	K6_LIVE_TEST=true \
+	K6_CLOUD_TOKEN=$(K6_CLOUD_TOKEN) \
+	K6_STACK_ID=$(K6_STACK_ID) \
+	K6_TEST_ID=$(K6_TEST_ID) \
+	go test -v -tags=e2e -count=1 -timeout=15m ./e2e/...
 
 lint: lint-stdout
 	golangci-lint run

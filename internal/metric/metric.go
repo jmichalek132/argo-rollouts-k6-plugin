@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"time"
 
 	"github.com/argoproj/argo-rollouts/metricproviders/plugin/rpc"
 	"github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
@@ -85,6 +86,7 @@ func (k *K6MetricProvider) Run(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metric) 
 	}
 
 	measurement.Metadata["runId"] = runID
+	setResumeAt(&measurement, metric)
 	slog.Info("metric plugin Run",
 		"runId", runID,
 		"metric", cfg.Metric,
@@ -129,6 +131,7 @@ func (k *K6MetricProvider) Resume(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metri
 	switch result.State {
 	case provider.Running:
 		measurement.Phase = v1alpha1.AnalysisPhaseRunning
+		setResumeAt(&measurement, metric)
 	case provider.Passed:
 		measurement.Phase = v1alpha1.AnalysisPhaseSuccessful
 		finishedAt := metav1.Now()
@@ -231,6 +234,22 @@ func extractMetricValue(result *provider.RunResult, metricType, aggregation stri
 	default:
 		return 0, fmt.Errorf("unsupported metric type %q (use thresholds|http_req_failed|http_req_duration|http_reqs)", metricType)
 	}
+}
+
+// setResumeAt sets measurement.ResumeAt based on the metric interval so the Argo Rollouts
+// analysis controller schedules a timely reconcile for in-progress measurements.
+// Without ResumeAt, the controller only re-queues when the AnalysisRun status changes
+// (no-op on identical Resume() results) or at the 15-minute informer resync.
+func setResumeAt(measurement *v1alpha1.Measurement, metric v1alpha1.Metric) {
+	if metric.Interval == "" {
+		return
+	}
+	d, err := metric.Interval.Duration()
+	if err != nil {
+		return
+	}
+	resumeAt := metav1.NewTime(time.Now().Add(d))
+	measurement.ResumeAt = &resumeAt
 }
 
 // triggerMode returns a string describing whether this is a trigger or poll-only run.
