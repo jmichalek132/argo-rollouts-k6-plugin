@@ -2,3 +2,4 @@ bin/
 /metric-plugin
 /step-plugin
 .env
+coverage.out

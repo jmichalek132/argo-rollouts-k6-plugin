@@ -101,6 +101,7 @@ func buildDeployPluginsAndMock(clusterName string) env.Func {
 		if err != nil {
 			return ctx, fmt.Errorf("create temp dir: %w", err)
 		}
+		defer os.RemoveAll(tmpDir)
 
 		// Compile all three binaries from the module root.
 		for _, binary := range []struct {
@@ -235,6 +236,7 @@ func buildDeployPluginsNoMock(clusterName string) env.Func {
 		if err != nil {
 			return ctx, fmt.Errorf("create temp dir: %w", err)
 		}
+		defer os.RemoveAll(tmpDir)
 
 		for _, binary := range []struct {
 			name string

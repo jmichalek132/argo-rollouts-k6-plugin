@@ -421,6 +421,19 @@ func TestRun_TimeoutInvalid(t *testing.T) {
 	assert.NotEmpty(t, result.Message)
 }
 
+func TestRun_TimeoutNegative(t *testing.T) {
+	p := New(&mockProvider{})
+	cfg := makeConfig(map[string]interface{}{
+		"timeout": "-5m",
+	})
+	ctx := makeContext(cfg, nil)
+	result, rpcErr := p.Run(nil, ctx)
+
+	assert.False(t, rpcErr.HasError())
+	assert.Equal(t, types.PhaseFailed, result.Phase)
+	assert.Contains(t, result.Message, "positive")
+}
+
 // --- Run: Status always contains runId (STEP-03) ---
 
 func TestRun_StatusContainsRunId(t *testing.T) {

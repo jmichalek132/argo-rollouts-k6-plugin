@@ -83,6 +83,25 @@ func TestParseAggregateValue_InvalidJSON(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParseAggregateValue_UnexpectedValueType(t *testing.T) {
+	// A boolean value in the values array should return an error, not 0.0.
+	body := []byte(`{
+		"status": "success",
+		"data": {
+			"resultType": "vector",
+			"result": [
+				{
+					"metric": {"__name__": "http_req_duration"},
+					"values": [[1684950639, true]]
+				}
+			]
+		}
+	}`)
+	_, err := parseAggregateValue(body)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected value type")
+}
+
 func TestParseAggregateValue_EmptyValues(t *testing.T) {
 	body := []byte(`{
 		"status": "success",
@@ -311,4 +330,39 @@ func searchString(s, substr string) bool {
 
 func formatFloat(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
+// --- mapToRunState tests ---
+
+func TestMapToRunState_UnknownStatus(t *testing.T) {
+	// An unknown status type must return Errored (defensive default).
+	state := mapToRunState("paused", nil)
+	assert.Equal(t, provider.Errored, state)
+}
+
+func TestMapToRunState_KnownStatuses(t *testing.T) {
+	passed := "passed"
+	failed := "failed"
+	errored := "error"
+
+	tests := []struct {
+		statusType string
+		result     *string
+		want       provider.RunState
+	}{
+		{"created", nil, provider.Running},
+		{"queued", nil, provider.Running},
+		{"initializing", nil, provider.Running},
+		{"running", nil, provider.Running},
+		{"processing_metrics", nil, provider.Running},
+		{"completed", &passed, provider.Passed},
+		{"completed", &failed, provider.Failed},
+		{"completed", &errored, provider.Errored},
+		{"aborted", nil, provider.Aborted},
+	}
+	for _, tc := range tests {
+		t.Run(tc.statusType, func(t *testing.T) {
+			assert.Equal(t, tc.want, mapToRunState(tc.statusType, tc.result))
+		})
+	}
 }

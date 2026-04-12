@@ -1,6 +1,10 @@
 package cloud
 
-import "github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
+import (
+	"log/slog"
+
+	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
+)
 
 // mapToRunState converts v6 API status type and result to a provider.RunState.
 // v6 API status values: created, queued, initializing, running, processing_metrics, completed, aborted.
@@ -26,6 +30,7 @@ func mapToRunState(statusType string, result *string) provider.RunState {
 	case "aborted":
 		return provider.Aborted
 	default:
+		slog.Warn("unknown k6 status type, treating as error", "statusType", statusType)
 		return provider.Errored
 	}
 }

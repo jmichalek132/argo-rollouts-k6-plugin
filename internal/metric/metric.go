@@ -103,6 +103,10 @@ func (k *K6MetricProvider) Resume(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metri
 		return metricutil.MarkMeasurementError(measurement, err)
 	}
 
+	if measurement.Metadata == nil {
+		measurement.Metadata = map[string]string{}
+	}
+
 	runID := measurement.Metadata["runId"]
 	if runID == "" {
 		return metricutil.MarkMeasurementError(measurement, fmt.Errorf("runId not found in measurement metadata"))

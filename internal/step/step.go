@@ -269,6 +269,10 @@ func parseTimeout(s string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid timeout %q: %w", s, err)
 	}
 
+	if d <= 0 {
+		return 0, fmt.Errorf("timeout must be positive, got %s", s)
+	}
+
 	if d > maxTimeout {
 		return 0, fmt.Errorf("timeout %s exceeds maximum of 2h", d)
 	}

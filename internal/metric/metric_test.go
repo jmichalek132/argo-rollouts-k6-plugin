@@ -223,6 +223,29 @@ func TestResume_HTTPReqFailed(t *testing.T) {
 
 // --- Resume tests: http_req_duration metric ---
 
+func TestResume_HTTPReqDurationP50(t *testing.T) {
+	mock := &mockProvider{
+		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Passed,
+				TestRunURL: "https://app.k6.io/runs/1",
+				HTTPReqDuration: provider.Percentiles{
+					P50: 150.0,
+					P95: 234.5,
+					P99: 450.0,
+				},
+			}, nil
+		},
+	}
+	cfg := defaultCfg()
+	cfg["metric"] = metricHTTPReqDuration
+	cfg["aggregation"] = "p50"
+	k := New(mock)
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
+	assert.Equal(t, "150", m.Value)
+}
+
 func TestResume_HTTPReqDurationP95(t *testing.T) {
 	mock := &mockProvider{
 		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
@@ -244,6 +267,29 @@ func TestResume_HTTPReqDurationP95(t *testing.T) {
 	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
 	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
 	assert.Equal(t, "234.5", m.Value)
+}
+
+func TestResume_HTTPReqDurationP99(t *testing.T) {
+	mock := &mockProvider{
+		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Passed,
+				TestRunURL: "https://app.k6.io/runs/1",
+				HTTPReqDuration: provider.Percentiles{
+					P50: 150.0,
+					P95: 234.5,
+					P99: 450.0,
+				},
+			}, nil
+		},
+	}
+	cfg := defaultCfg()
+	cfg["metric"] = metricHTTPReqDuration
+	cfg["aggregation"] = "p99"
+	k := New(mock)
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
+	assert.Equal(t, "450", m.Value)
 }
 
 func TestResume_HTTPReqDuration_MissingAggregation(t *testing.T) {
@@ -300,6 +346,34 @@ func TestResume_HTTPReqs(t *testing.T) {
 	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
 	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
 	assert.Equal(t, "142.3", m.Value)
+}
+
+func TestResume_NilMetadata(t *testing.T) {
+	// If the controller passes a measurement with nil Metadata (shouldn't happen in
+	// practice, but the interface contract doesn't prevent it), Resume must not panic
+	// and must initialise the map before writing to it.
+	mock := &mockProvider{
+		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:            provider.Passed,
+				ThresholdsPassed: true,
+				TestRunURL:       "https://app.k6.io/runs/1",
+			}, nil
+		},
+	}
+	// Seed a measurement that has nil Metadata but a known runId stored elsewhere.
+	// We simulate the controller passing a pre-populated runId via an explicit map init.
+	measurement := v1alpha1.Measurement{
+		Phase:    v1alpha1.AnalysisPhaseRunning,
+		Metadata: map[string]string{"runId": "run-1"},
+	}
+	measurement.Metadata = nil // drop it to trigger the nil guard
+
+	k := New(mock)
+	// With nil Metadata the runId lookup returns "" → early error return (no panic).
+	m := k.Resume(nil, testMetric(defaultCfg()), measurement)
+	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
+	assert.Contains(t, m.Message, "runId not found")
 }
 
 // --- Resume tests: state mapping ---

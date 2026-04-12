@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
+	"net/http"
 	"strconv"
+	"time"
 
 	k6 "github.com/grafana/k6-cloud-openapi-client-go/k6"
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
@@ -46,6 +49,7 @@ func (p *GrafanaCloudProvider) Name() string {
 // Per D-07: stateless, creates client per call.
 func (p *GrafanaCloudProvider) newK6Client(ctx context.Context, cfg *provider.PluginConfig) (context.Context, *k6.APIClient) {
 	k6Cfg := k6.NewConfiguration()
+	k6Cfg.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 	if p.baseURL != "" {
 		k6Cfg.Servers = k6.ServerConfigurations{{URL: p.baseURL}}
 	}
@@ -57,13 +61,13 @@ func (p *GrafanaCloudProvider) newK6Client(ctx context.Context, cfg *provider.Pl
 
 // TriggerRun starts a new k6 test run. Returns the run ID as a string.
 func (p *GrafanaCloudProvider) TriggerRun(ctx context.Context, cfg *provider.PluginConfig) (string, error) {
-	testID, err := strconv.ParseInt(cfg.TestID, 10, 32)
-	if err != nil {
-		return "", fmt.Errorf("invalid testId %q: %w", cfg.TestID, err)
+	testID, err := strconv.ParseInt(cfg.TestID, 10, 64)
+	if err != nil || testID <= 0 || testID > math.MaxInt32 {
+		return "", fmt.Errorf("invalid testId %q: must be a positive integer ≤ %d", cfg.TestID, math.MaxInt32)
 	}
-	stackID, err := strconv.ParseInt(cfg.StackID, 10, 32)
-	if err != nil {
-		return "", fmt.Errorf("invalid stackId %q: %w", cfg.StackID, err)
+	stackID, err := strconv.ParseInt(cfg.StackID, 10, 64)
+	if err != nil || stackID <= 0 || stackID > math.MaxInt32 {
+		return "", fmt.Errorf("invalid stackId %q: must be a positive integer ≤ %d", cfg.StackID, math.MaxInt32)
 	}
 
 	ctx, client := p.newK6Client(ctx, cfg)
@@ -90,13 +94,13 @@ func (p *GrafanaCloudProvider) TriggerRun(ctx context.Context, cfg *provider.Plu
 // GetRunResult returns current status and metrics for a run.
 // Returns partial metrics during active runs (State == Running).
 func (p *GrafanaCloudProvider) GetRunResult(ctx context.Context, cfg *provider.PluginConfig, runID string) (*provider.RunResult, error) {
-	runIDInt, err := strconv.ParseInt(runID, 10, 32)
-	if err != nil {
-		return nil, fmt.Errorf("invalid runId %q: %w", runID, err)
+	runIDInt, err := strconv.ParseInt(runID, 10, 64)
+	if err != nil || runIDInt <= 0 || runIDInt > math.MaxInt32 {
+		return nil, fmt.Errorf("invalid runId %q: must be a positive integer ≤ %d", runID, math.MaxInt32)
 	}
-	stackID, err := strconv.ParseInt(cfg.StackID, 10, 32)
-	if err != nil {
-		return nil, fmt.Errorf("invalid stackId %q: %w", cfg.StackID, err)
+	stackID, err := strconv.ParseInt(cfg.StackID, 10, 64)
+	if err != nil || stackID <= 0 || stackID > math.MaxInt32 {
+		return nil, fmt.Errorf("invalid stackId %q: must be a positive integer ≤ %d", cfg.StackID, math.MaxInt32)
 	}
 
 	ctx, client := p.newK6Client(ctx, cfg)
@@ -186,13 +190,13 @@ func (p *GrafanaCloudProvider) populateAggregateMetrics(ctx context.Context, cfg
 // StopRun requests cancellation of a running test.
 // No-op if the run is already in a terminal state.
 func (p *GrafanaCloudProvider) StopRun(ctx context.Context, cfg *provider.PluginConfig, runID string) error {
-	runIDInt, err := strconv.ParseInt(runID, 10, 32)
-	if err != nil {
-		return fmt.Errorf("invalid runId %q: %w", runID, err)
+	runIDInt, err := strconv.ParseInt(runID, 10, 64)
+	if err != nil || runIDInt <= 0 || runIDInt > math.MaxInt32 {
+		return fmt.Errorf("invalid runId %q: must be a positive integer ≤ %d", runID, math.MaxInt32)
 	}
-	stackID, err := strconv.ParseInt(cfg.StackID, 10, 32)
-	if err != nil {
-		return fmt.Errorf("invalid stackId %q: %w", cfg.StackID, err)
+	stackID, err := strconv.ParseInt(cfg.StackID, 10, 64)
+	if err != nil || stackID <= 0 || stackID > math.MaxInt32 {
+		return fmt.Errorf("invalid stackId %q: must be a positive integer ≤ %d", cfg.StackID, math.MaxInt32)
 	}
 
 	ctx, client := p.newK6Client(ctx, cfg)

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
 )
@@ -50,7 +51,8 @@ func (p *GrafanaCloudProvider) QueryAggregateMetric(
 	req.Header.Set("Authorization", "Bearer "+cfg.APIToken)
 	req.Header.Set("X-Stack-Id", cfg.StackID)
 
-	resp, err := http.DefaultClient.Do(req)
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("v5 aggregate query: %w", err)
 	}

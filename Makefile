@@ -13,7 +13,7 @@ build-step:
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/step-plugin ./cmd/step-plugin
 
 test:
-	go test -race -v -count=1 ./...
+	GOPATH="$(HOME)/go" go test -race -v -count=1 ./...
 
 test-e2e:
 	GOPATH="$(HOME)/go" DOCKER_HOST="unix://$(HOME)/.colima/default/docker.sock" \
