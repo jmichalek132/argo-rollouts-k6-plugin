@@ -15,6 +15,10 @@ import (
 
 const defaultBaseURL = "https://api.k6.io"
 
+// maxResponseBodySize limits the v5 response body read to 1 MB to prevent OOM
+// from a misbehaving or compromised server.
+const maxResponseBodySize = 1 << 20
+
 // AggregateMetricQuery defines a v5 aggregate metric query.
 type AggregateMetricQuery struct {
 	MetricName string // "http_req_failed", "http_req_duration", "http_reqs"
@@ -81,11 +85,11 @@ func (p *GrafanaCloudProvider) QueryAggregateMetric(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 		return 0, fmt.Errorf("v5 aggregate query returned %d: %s", resp.StatusCode, string(body))
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	if err != nil {
 		return 0, fmt.Errorf("read v5 response: %w", err)
 	}
