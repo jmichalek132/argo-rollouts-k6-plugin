@@ -12,8 +12,8 @@
 
 ### Dependency Management
 
-- [ ] **DEPS-01**: Renovate bot configured with `renovate.json` for automated Go module dependency updates
-- [ ] **DEPS-02**: Renovate bot configured for automated GitHub Actions dependency updates (actions/checkout, actions/setup-go, goreleaser, golangci-lint)
+- [x] **DEPS-01**: Renovate bot configured with `renovate.json` for automated Go module dependency updates
+- [x] **DEPS-02**: Renovate bot configured for automated GitHub Actions dependency updates (actions/checkout, actions/setup-go, goreleaser, golangci-lint)
 
 ## Future Requirements
 
@@ -53,8 +53,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | CI-01 | Phase 5 | Complete |
 | CI-02 | Phase 5 | Complete |
-| DEPS-01 | Phase 6 | Pending |
-| DEPS-02 | Phase 6 | Pending |
+| DEPS-01 | Phase 6 | Complete |
+| DEPS-02 | Phase 6 | Complete |
 
 **Coverage:**
 - v0.2.0 requirements: 4 total
