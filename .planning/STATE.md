@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: Hardening
-status: ready_to_plan
-stopped_at: Roadmap created for v0.2.0
-last_updated: "2026-04-15T00:00:00.000Z"
-last_activity: 2026-04-15
+status: planning
+stopped_at: Phase 5 context gathered
+last_updated: "2026-04-14T22:39:12.288Z"
+last_activity: 2026-04-15 — Roadmap created for v0.2.0
 progress:
   total_phases: 2
   completed_phases: 0
@@ -66,6 +66,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-15
-Stopped at: Roadmap created for v0.2.0 Hardening
-Resume file: None
+Last session: 2026-04-14T22:39:12.285Z
+Stopped at: Phase 5 context gathered
+Resume file: .planning/phases/05-ci-pipeline-fix/05-CONTEXT.md
