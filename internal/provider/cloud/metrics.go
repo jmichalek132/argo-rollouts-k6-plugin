@@ -33,7 +33,10 @@ func isValidMetricParam(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '.' || r == '(' || r == ')') {
+		isAlpha := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+		isDigit := r >= '0' && r <= '9'
+		isAllowed := r == '_' || r == '.' || r == '(' || r == ')'
+		if !isAlpha && !isDigit && !isAllowed {
 			return false
 		}
 	}
