@@ -1,5 +1,7 @@
 bin/
 /metric-plugin
 /step-plugin
+/mock
+/dist/
 .env
 coverage.out
