@@ -18,13 +18,17 @@ Rollouts automatically pass or roll back based on real load test results — no 
 
 ### Active
 
-- [ ] Test script sourcing (v1): reference an existing Grafana Cloud k6 test by ID
-- [ ] Test script sourcing (v2): k6 .js script stored in a Kubernetes ConfigMap
-- [ ] Configurable metrics with sane defaults: HTTP error rate, response time percentiles (p95/p99), k6 threshold pass/fail, user-defined custom metrics
-- [ ] Example AnalysisTemplates for common use cases
-- [ ] Integration tests: e2e test suite running against a kind cluster
-- [ ] Release binary packaged following Argo Rollouts plugin conventions (checksum, GitHub Releases)
-- [ ] README and setup guide for community consumption
+- [ ] Test script sourcing (v2): k6 .js script stored in a Kubernetes ConfigMap — deferred to v2
+- [ ] Step plugin secret handling: step plugin config has no secretKeyRef support; API tokens visible in Rollout spec and dashboard UI — upstream Argo Rollouts limitation
+
+### Completed in v0.1.0
+
+- [x] Test script sourcing (v1): reference an existing Grafana Cloud k6 test by ID — *Validated in Phase 1-3*
+- [x] Configurable metrics with sane defaults: HTTP error rate, response time percentiles (p50/p95/p99), k6 threshold pass/fail, HTTP throughput — *Validated in Phase 2: metric-plugin*
+- [x] Example AnalysisTemplates for common use cases — *Validated in Phase 4: three example patterns*
+- [x] Integration tests: e2e test suite running against a kind cluster — *Validated in Phase 4: 4 mock scenarios + 4 live scenarios*
+- [x] Release binary packaged following Argo Rollouts plugin conventions (checksum, GitHub Releases) — *Validated in Phase 4: goreleaser + GitHub Actions*
+- [x] README and setup guide for community consumption — *Validated in Phase 4: README + CONTRIBUTING*
 
 ### Out of Scope
 
@@ -54,10 +58,11 @@ Rollouts automatically pass or roll back based on real load test results — no 
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Grafana Cloud k6 first | Best API for triggering runs and querying structured metrics; most users already have it | — Pending |
-| Provider abstraction from day 1 | Avoids breaking API when adding in-cluster or binary backends | — Pending |
-| Both metric + step plugins | Metric plugin for threshold-based gates; step plugin for fire-and-wait use case — different workflows need both | — Pending |
-| ConfigMap script sourcing in v2 | Grafana Cloud test ID covers immediate need; ConfigMap is next natural step for users without Grafana Cloud | — Pending |
+| Grafana Cloud k6 first | Best API for triggering runs and querying structured metrics; most users already have it | Validated — shipped in v0.1.0 |
+| Provider abstraction from day 1 | Avoids breaking API when adding in-cluster or binary backends | Validated — `internal/provider.Provider` interface in Phase 1 |
+| Both metric + step plugins | Metric plugin for threshold-based gates; step plugin for fire-and-wait use case — different workflows need both | Validated — both plugins shipped and e2e tested |
+| ConfigMap script sourcing in v2 | Grafana Cloud test ID covers immediate need; ConfigMap is next natural step for users without Grafana Cloud | Deferred to v2 as planned |
+| No custom metrics/tracing | Plugin is a subprocess with no scrape endpoint; Argo Rollouts already covers outcomes; go-plugin has no OTel support | Decided in code review — structured slog with runId correlation is sufficient |
 
 ## Evolution
 
@@ -77,4 +82,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-10 — Phase 3 complete: step plugin implemented and verified*
+*Last updated: 2026-04-14 — v0.1.0 released: all 4 phases complete, two code review rounds, live and mock e2e verified*
