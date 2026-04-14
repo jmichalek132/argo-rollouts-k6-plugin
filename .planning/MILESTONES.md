@@ -1,5 +1,15 @@
 # Milestones
 
+## v0.2.0 Hardening (Shipped: 2026-04-14)
+
+**Phases completed:** 2 phases, 2 plans, 2 tasks
+
+**Key accomplishments:**
+
+- Cross-platform DOCKER_HOST in Makefile and e2e workflow with kind v0.31.0 install and make target delegation
+
+---
+
 ## v1.0 MVP (Shipped: 2026-04-14)
 
 **Phases completed:** 4 phases, 9 plans, 16 tasks

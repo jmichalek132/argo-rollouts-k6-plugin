@@ -10,20 +10,13 @@ Rollouts automatically pass or roll back based on real load test results — no 
 
 ## Current State
 
-Shipped **v1.0** on 2026-04-14. Two fully functional plugin binaries with Grafana Cloud k6 backend, GoReleaser multi-arch CI/CD, e2e test suite, three example patterns, and community-ready documentation.
+Shipped **v0.2.0** on 2026-04-15. CI pipeline hardened, automated dependency management enabled.
 
 - **Go LOC:** ~23,800 across 95 files
 - **Test coverage:** 91.7% (metric), 89.1% (step)
 - **Binaries:** 8 platform variants (linux/darwin x amd64/arm64) via GoReleaser
-- **e2e:** 4 mock scenarios on kind cluster
-
-## Current Milestone: v0.2.0 Hardening
-
-**Goal:** Fix CI gaps from v1.0 and set up automated dependency management.
-
-**Target features:**
-- Fix e2e GitHub Actions workflow: add `kind` install step and `-timeout=15m` flag
-- Set up Renovate bot for automated Go module and GitHub Actions dependency updates
+- **e2e:** 4 mock scenarios on kind cluster, CI verified passing
+- **Dependencies:** Renovate bot configured for Go modules and GitHub Actions
 
 ## Requirements
 
@@ -37,6 +30,8 @@ Shipped **v1.0** on 2026-04-14. Two fully functional plugin binaries with Grafan
 - ✓ e2e test suite on kind cluster with mock k6 API — v1.0 (Phase 4)
 - ✓ GoReleaser multi-arch release pipeline with SHA256 checksums — v1.0 (Phase 4)
 - ✓ README, CONTRIBUTING, and community documentation — v1.0 (Phase 4)
+- ✓ e2e CI pipeline with kind install and correct timeout — v0.2.0 (Phase 5)
+- ✓ Renovate bot for automated Go module and GitHub Actions dependency updates — v0.2.0 (Phase 6)
 
 ### Active
 
@@ -62,7 +57,7 @@ Shipped **v1.0** on 2026-04-14. Two fully functional plugin binaries with Grafan
 - Both plugin types (metric and step) have distinct gRPC interfaces in Argo Rollouts and must be implemented separately
 - The metric plugin is more composable — users can combine k6 metrics with Prometheus/Datadog metrics in a single AnalysisTemplate
 - v1.0 shipped with 4 phases in 5 days; all 30 requirements satisfied, cross-phase integration verified
-- Known tech debt: e2e CI workflow needs `kind` install step and `-timeout=15m` flag
+- v0.2.0 shipped same day: e2e CI fixed (kind install, DOCKER_HOST conditional), Renovate configured
 
 ## Constraints
 
@@ -104,4 +99,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-15 after v1.0 milestone*
+*Last updated: 2026-04-15 after v0.2.0 milestone*

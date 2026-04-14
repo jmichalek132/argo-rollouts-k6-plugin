@@ -46,6 +46,28 @@
 
 ---
 
+## Milestone: v0.2.0 — Hardening
+
+**Shipped:** 2026-04-15
+**Phases:** 2 | **Plans:** 2 | **Tasks:** 2
+
+### What Was Built
+- Cross-platform Makefile DOCKER_HOST (`?=` conditional) and e2e workflow with kind v0.31.0 install + make target delegation
+- Renovate config for automated Go module and GitHub Actions dependency updates
+
+### What Worked
+- **Research caught a critical blocker**: The researcher discovered the hardcoded Colima DOCKER_HOST in the Makefile — without this, `make test-e2e` would have failed on CI even after fixing the workflow
+- **Immediate CI validation**: Pushed changes, triggered `workflow_dispatch`, confirmed green in one pass — no iteration needed
+
+### What Was Inefficient
+- Nothing notable — small milestone executed cleanly
+
+### Key Lessons
+1. **Always check Makefile env vars for platform assumptions** — local dev conveniences (Colima socket) break CI silently
+2. **`?=` conditional assignment** is the right pattern for Make variables that differ between local and CI environments
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -53,6 +75,7 @@
 | Milestone | Phases | Plans | Tasks | Key Pattern |
 |-----------|--------|-------|-------|-------------|
 | v1.0 | 4 | 9 | 16 | Provider-first architecture, TDD with mock HTTP |
+| v0.2.0 | 2 | 2 | 2 | Research catches platform-specific blockers |
 
 ### Cumulative Quality
 

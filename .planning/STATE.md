@@ -4,13 +4,13 @@ milestone: v0.2.0
 milestone_name: Hardening
 status: completed
 stopped_at: Phase 5 complete — CI Pipeline Fix
-last_updated: "2026-04-14T22:55:49.917Z"
-last_activity: 2026-04-15 — Completed 05-01-PLAN.md
+last_updated: "2026-04-14T23:07:35.264Z"
+last_activity: 2026-04-14
 progress:
   total_phases: 2
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 100
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-15)
 Phase: 5 of 6 (CI Pipeline Fix)
 Plan: 1 of 1
 Status: Complete
-Last activity: 2026-04-15 — Completed 05-01-PLAN.md
+Last activity: 2026-04-14
 
 Progress: [██████████████████████] 1/1 plans (100%)
 
