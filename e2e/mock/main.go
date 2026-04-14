@@ -80,6 +80,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	log.Printf("%s %s", r.Method, path)
 
+	// POST /reset  (reset all counters between tests)
+	if r.Method == http.MethodPost && path == "/reset" {
+		for _, cfg := range runConfigs {
+			cfg.counter.Store(0)
+		}
+		log.Println("reset: all run counters cleared")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	// POST /cloud/v6/load_tests/{id}/start  (TriggerRun)
 	if r.Method == http.MethodPost && strings.Contains(path, "/load_tests/") && strings.HasSuffix(path, "/start") {
 		handleStartTestRun(w, path)
