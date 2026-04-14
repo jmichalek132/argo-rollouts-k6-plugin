@@ -17,6 +17,14 @@ Shipped **v1.0** on 2026-04-14. Two fully functional plugin binaries with Grafan
 - **Binaries:** 8 platform variants (linux/darwin x amd64/arm64) via GoReleaser
 - **e2e:** 4 mock scenarios on kind cluster
 
+## Current Milestone: v0.2.0 Hardening
+
+**Goal:** Fix CI gaps from v1.0 and set up automated dependency management.
+
+**Target features:**
+- Fix e2e GitHub Actions workflow: add `kind` install step and `-timeout=15m` flag
+- Set up Renovate bot for automated Go module and GitHub Actions dependency updates
+
 ## Requirements
 
 ### Validated

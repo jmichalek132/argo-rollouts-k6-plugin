@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: MVP
-status: completed
-stopped_at: Milestone v1.0 archived and tagged
+milestone: v0.2.0
+milestone_name: Hardening
+status: defining_requirements
+stopped_at: Defining requirements for v0.2.0
 last_updated: "2026-04-15T00:00:00.000Z"
 last_activity: 2026-04-15
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,13 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Planning next milestone
+**Current focus:** Milestone v0.2.0 Hardening
 
 ## Current Position
 
-Phase: All v1.0 phases complete (1-4)
-Status: Milestone v1.0 archived
-Last activity: 2026-04-15
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-15 — Milestone v0.2.0 started
 
 Progress: [████████████████████] 9/9 plans (100%)
 
