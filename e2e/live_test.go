@@ -20,19 +20,7 @@ func TestLiveMetricPlugin(t *testing.T) {
 	if os.Getenv("K6_LIVE_TEST") != "true" {
 		t.Skip("live test disabled (set K6_LIVE_TEST=true to enable)")
 	}
-
-	apiToken := os.Getenv("K6_CLOUD_TOKEN")
-	if apiToken == "" {
-		t.Fatal("K6_CLOUD_TOKEN env var is required for live tests")
-	}
-	testID := os.Getenv("K6_TEST_ID")
-	if testID == "" {
-		t.Fatal("K6_TEST_ID env var is required for live tests")
-	}
-	stackID := os.Getenv("K6_STACK_ID")
-	if stackID == "" {
-		stackID = "1313689"
-	}
+	apiToken, stackID, testID := liveCredentials(t, "K6_TEST_ID")
 
 	f := features.New("live metric plugin pass").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
@@ -87,19 +75,7 @@ func TestLiveStepPlugin(t *testing.T) {
 	if os.Getenv("K6_LIVE_TEST") != "true" {
 		t.Skip("live test disabled (set K6_LIVE_TEST=true to enable)")
 	}
-
-	apiToken := os.Getenv("K6_CLOUD_TOKEN")
-	if apiToken == "" {
-		t.Fatal("K6_CLOUD_TOKEN env var is required for live tests")
-	}
-	testID := os.Getenv("K6_TEST_ID")
-	if testID == "" {
-		t.Fatal("K6_TEST_ID env var is required for live tests")
-	}
-	stackID := os.Getenv("K6_STACK_ID")
-	if stackID == "" {
-		stackID = "1313689"
-	}
+	apiToken, stackID, testID := liveCredentials(t, "K6_TEST_ID")
 
 	f := features.New("live step plugin pass").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
