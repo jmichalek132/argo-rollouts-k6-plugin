@@ -7,8 +7,8 @@
 
 ### CI/CD
 
-- [ ] **CI-01**: e2e GitHub Actions workflow installs `kind` binary before running tests
-- [ ] **CI-02**: e2e GitHub Actions workflow uses `-timeout=15m` matching Makefile's `test-e2e` target
+- [x] **CI-01**: e2e GitHub Actions workflow installs `kind` binary before running tests
+- [x] **CI-02**: e2e GitHub Actions workflow uses `-timeout=15m` matching Makefile's `test-e2e` target
 
 ### Dependency Management
 
@@ -51,8 +51,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CI-01 | Phase 5 | Pending |
-| CI-02 | Phase 5 | Pending |
+| CI-01 | Phase 5 | Complete |
+| CI-02 | Phase 5 | Complete |
 | DEPS-01 | Phase 6 | Pending |
 | DEPS-02 | Phase 6 | Pending |
 

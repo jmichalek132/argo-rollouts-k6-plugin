@@ -27,7 +27,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 **Milestone Goal:** Fix CI gaps from v1.0 and set up automated dependency management.
 
-- [ ] **Phase 5: CI Pipeline Fix** - Fix e2e workflow to install kind and use correct timeout
+- [x] **Phase 5: CI Pipeline Fix** - Fix e2e workflow to install kind and use correct timeout
 - [ ] **Phase 6: Automated Dependency Management** - Configure Renovate for Go modules and GitHub Actions
 
 ## Phase Details
@@ -42,7 +42,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. A push to main triggers the e2e workflow and it completes without timeout or missing-binary errors
 **Plans:** 1 plan
 Plans:
-- [ ] 05-01-PLAN.md — Fix Makefile DOCKER_HOST and e2e workflow (kind install + make targets)
+- [x] 05-01-PLAN.md — Fix Makefile DOCKER_HOST and e2e workflow (kind install + make targets)
 
 ### Phase 6: Automated Dependency Management
 **Goal**: Go module and GitHub Actions dependencies receive automated update PRs via Renovate
@@ -62,5 +62,5 @@ Plans:
 | 2. Metric Plugin | v1.0 | 2/2 | Complete | 2026-04-10 |
 | 3. Step Plugin | v1.0 | 2/2 | Complete | 2026-04-10 |
 | 4. Release & Examples | v1.0 | 3/3 | Complete | 2026-04-10 |
-| 5. CI Pipeline Fix | v0.2.0 | 0/1 | Planned | - |
+| 5. CI Pipeline Fix | v0.2.0 | 1/1 | Complete | 2026-04-15 |
 | 6. Automated Dependency Management | v0.2.0 | 0/0 | Not started | - |

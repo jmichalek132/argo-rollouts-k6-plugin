@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: Hardening
 status: planning
-stopped_at: Phase 5 context gathered
-last_updated: "2026-04-14T22:39:12.288Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-04-14T22:53:02.332Z"
 last_activity: 2026-04-15 — Roadmap created for v0.2.0
 progress:
   total_phases: 2
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Milestone v0.2.0 Hardening — Phase 5 ready to plan
+**Current focus:** Milestone v0.2.0 Hardening — Phase 5 complete
 
 ## Current Position
 
 Phase: 5 of 6 (CI Pipeline Fix)
-Plan: —
-Status: Ready to plan
-Last activity: 2026-04-15 — Roadmap created for v0.2.0
+Plan: 1 of 1
+Status: Complete
+Last activity: 2026-04-15 — Completed 05-01-PLAN.md
 
-Progress: [░░░░░░░░░░░░░░░░░░░░] 0/0 plans (0%)
+Progress: [██████████████████████] 1/1 plans (100%)
 
 ## Performance Metrics
 
@@ -50,11 +50,20 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0/0 pla
 
 **Total (v1.0):** 9 plans, 16 tasks, ~33 min execution time
 
+**Velocity (v0.2.0):**
+
+| Phase | Plans | Duration | Tasks | Files |
+|-------|-------|----------|-------|-------|
+| Phase 05 P01 | 1 | 1min | 2 | 2 |
+
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
+
+- [Phase 05]: DOCKER_HOST ?= conditional assignment for cross-platform Makefile
+- [Phase 05]: kind v0.31.0 installed via go install in e2e workflow (upgraded from D-01 v0.27.0)
 
 ### Pending Todos
 
@@ -66,6 +75,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-14T22:39:12.285Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-ci-pipeline-fix/05-CONTEXT.md
+Last session: 2026-04-14T22:53:02.330Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
