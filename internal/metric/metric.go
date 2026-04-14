@@ -167,6 +167,10 @@ func (k *K6MetricProvider) Terminate(_ *v1alpha1.AnalysisRun, metric v1alpha1.Me
 		return metricutil.MarkMeasurementError(measurement, err)
 	}
 
+	if measurement.Metadata == nil {
+		measurement.Metadata = map[string]string{}
+	}
+
 	runID := measurement.Metadata["runId"]
 	if runID != "" {
 		ctx := context.Background()
