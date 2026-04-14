@@ -12,10 +12,10 @@ This roadmap delivers two Argo Rollouts plugin binaries (metric + step) that gat
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation & Provider** - Go module scaffolding, build pipeline, provider interface with Grafana Cloud k6 implementation
-- [ ] **Phase 2: Metric Plugin** - Full RpcMetricProvider implementation with all k6 metrics and unit tests
-- [ ] **Phase 3: Step Plugin** - Full RpcStep implementation with trigger/poll/stop lifecycle and graceful termination
-- [ ] **Phase 4: Release & Examples** - e2e tests, example manifests, documentation, goreleaser CI/CD pipeline
+- [x] **Phase 1: Foundation & Provider** - Go module scaffolding, build pipeline, provider interface with Grafana Cloud k6 implementation
+- [x] **Phase 2: Metric Plugin** - Full RpcMetricProvider implementation with all k6 metrics and unit tests
+- [x] **Phase 3: Step Plugin** - Full RpcStep implementation with trigger/poll/stop lifecycle and graceful termination
+- [x] **Phase 4: Release & Examples** - e2e tests, example manifests, documentation, goreleaser CI/CD pipeline
 
 ## Phase Details
 
@@ -91,5 +91,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation & Provider | 2/2 | Complete | 2026-04-09 |
 | 2. Metric Plugin | 2/2 | Complete | 2026-04-10 |
-| 3. Step Plugin | 0/2 | Planning complete | - |
-| 4. Release & Examples | 0/3 | Planning complete | - |
+| 3. Step Plugin | 2/2 | Complete | 2026-04-10 |
+| 4. Release & Examples | 3/3 | Complete | 2026-04-10 |
