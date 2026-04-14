@@ -126,7 +126,7 @@ func handleStartTestRun(w http.ResponseWriter, path string) {
 
 func handleGetTestRun(w http.ResponseWriter, path string) {
 	var runID int
-	fmt.Sscanf(segmentAfter(path, "test_runs"), "%d", &runID)
+	_, _ = fmt.Sscanf(segmentAfter(path, "test_runs"), "%d", &runID)
 
 	cfg, ok := runConfigs[runID]
 	if !ok {
@@ -180,7 +180,7 @@ func testRunBody(id int, statusType string, result *string) map[string]interface
 
 func handleAggregateQuery(w http.ResponseWriter, fullURL, path string) {
 	var runID int
-	fmt.Sscanf(segmentAfter(path, "test_runs"), "%d", &runID)
+	_, _ = fmt.Sscanf(segmentAfter(path, "test_runs"), "%d", &runID)
 
 	metrics, ok := runAggregates[runID]
 	if !ok {

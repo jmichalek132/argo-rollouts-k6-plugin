@@ -26,6 +26,7 @@ var handshakeConfig = goPlugin.HandshakeConfig{
 func main() {
 	// Configure logging to stderr ONLY -- stdout reserved for go-plugin handshake (DIST-04).
 	setupLogging()
+	slog.Info("starting step plugin", "version", version)
 
 	// Create provider and step plugin implementation.
 	var opts []cloud.Option

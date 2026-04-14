@@ -6,6 +6,13 @@ import (
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
 )
 
+// k6 Cloud API result values.
+const (
+	resultPassed = "passed"
+	resultFailed = "failed"
+	resultError  = "error"
+)
+
 // mapToRunState converts v6 API status type and result to a provider.RunState.
 // v6 API status values: created, queued, initializing, running, processing_metrics, completed, aborted.
 // v6 API result values: passed, failed, error (or nil if not yet finished).
@@ -18,11 +25,11 @@ func mapToRunState(statusType string, result *string) provider.RunState {
 			return provider.Errored // should not happen, but defensive
 		}
 		switch *result {
-		case "passed":
+		case resultPassed:
 			return provider.Passed
-		case "failed":
+		case resultFailed:
 			return provider.Failed
-		case "error":
+		case resultError:
 			return provider.Errored
 		default:
 			return provider.Errored
@@ -37,5 +44,5 @@ func mapToRunState(statusType string, result *string) provider.RunState {
 
 // isThresholdPassed returns true if the result indicates all k6 thresholds passed.
 func isThresholdPassed(result *string) bool {
-	return result != nil && *result == "passed"
+	return result != nil && *result == resultPassed
 }
