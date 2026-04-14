@@ -21,6 +21,21 @@ type AggregateMetricQuery struct {
 	QueryFunc  string // "rate", "histogram_quantile(0.95)", etc.
 }
 
+// isValidMetricParam validates that a metric parameter contains only safe characters
+// for URL interpolation. This prevents path injection via MetricName or QueryFunc
+// in the v5 aggregate endpoint URL.
+func isValidMetricParam(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '.' || r == '(' || r == ')') {
+			return false
+		}
+	}
+	return true
+}
+
 // QueryAggregateMetric calls the k6 Cloud v5 aggregate endpoint.
 // URL: {baseURL}/cloud/v5/test_runs/{runID}/query_aggregate_k6(metric='{name}',query='{func}')
 func (p *GrafanaCloudProvider) QueryAggregateMetric(
@@ -29,6 +44,13 @@ func (p *GrafanaCloudProvider) QueryAggregateMetric(
 	runID string,
 	query AggregateMetricQuery,
 ) (float64, error) {
+	if !isValidMetricParam(query.MetricName) {
+		return 0, fmt.Errorf("invalid metric name %q: must match [a-zA-Z0-9_.()] only", query.MetricName)
+	}
+	if !isValidMetricParam(query.QueryFunc) {
+		return 0, fmt.Errorf("invalid query function %q: must match [a-zA-Z0-9_.()] only", query.QueryFunc)
+	}
+
 	base := p.baseURL
 	if base == "" {
 		base = defaultBaseURL
