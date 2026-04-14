@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: Hardening
-status: defining_requirements
-stopped_at: Defining requirements for v0.2.0
+status: ready_to_plan
+stopped_at: Roadmap created for v0.2.0
 last_updated: "2026-04-15T00:00:00.000Z"
 last_activity: 2026-04-15
 progress:
-  total_phases: 0
+  total_phases: 2
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Milestone v0.2.0 Hardening
+**Current focus:** Milestone v0.2.0 Hardening — Phase 5 ready to plan
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 5 of 6 (CI Pipeline Fix)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-15 — Milestone v0.2.0 started
+Status: Ready to plan
+Last activity: 2026-04-15 — Roadmap created for v0.2.0
 
-Progress: [████████████████████] 9/9 plans (100%)
+Progress: [░░░░░░░░░░░░░░░░░░░░] 0/0 plans (0%)
 
 ## Performance Metrics
 
-**Velocity:**
+**Velocity (from v1.0):**
 
 | Phase | Plans | Duration | Tasks | Files |
 |-------|-------|----------|-------|-------|
@@ -48,7 +48,7 @@ Progress: [████████████████████] 9/9 pla
 | Phase 04 P02 | 1 | 4min | 2 | 11 |
 | Phase 04 P03 | 1 | 3min | 2 | 12 |
 
-**Total:** 9 plans, 16 tasks, ~33 min execution time
+**Total (v1.0):** 9 plans, 16 tasks, ~33 min execution time
 
 ## Accumulated Context
 
@@ -62,10 +62,10 @@ None.
 
 ### Blockers/Concerns
 
-None — milestone complete.
+None.
 
 ## Session Continuity
 
 Last session: 2026-04-15
-Stopped at: Milestone v1.0 archived and tagged
+Stopped at: Roadmap created for v0.2.0 Hardening
 Resume file: None

@@ -51,16 +51,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CI-01 | - | Pending |
-| CI-02 | - | Pending |
-| DEPS-01 | - | Pending |
-| DEPS-02 | - | Pending |
+| CI-01 | Phase 5 | Pending |
+| CI-02 | Phase 5 | Pending |
+| DEPS-01 | Phase 6 | Pending |
+| DEPS-02 | Phase 6 | Pending |
 
 **Coverage:**
 - v0.2.0 requirements: 4 total
-- Mapped to phases: 0
-- Unmapped: 4
+- Mapped to phases: 4
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-15*
-*Last updated: 2026-04-15 after initial definition*
+*Last updated: 2026-04-15 after roadmap creation*
