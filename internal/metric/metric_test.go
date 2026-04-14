@@ -12,40 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
+	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/providertest"
 )
 
 const metricHTTPReqDuration = "http_req_duration"
 
-// --- Mock Provider ---
-
-type mockProvider struct {
-	triggerRunFn   func(ctx context.Context, cfg *provider.PluginConfig) (string, error)
-	getRunResultFn func(ctx context.Context, cfg *provider.PluginConfig, runID string) (*provider.RunResult, error)
-	stopRunFn      func(ctx context.Context, cfg *provider.PluginConfig, runID string) error
-}
-
-func (m *mockProvider) Name() string { return "mock" }
-
-func (m *mockProvider) TriggerRun(ctx context.Context, cfg *provider.PluginConfig) (string, error) {
-	if m.triggerRunFn != nil {
-		return m.triggerRunFn(ctx, cfg)
-	}
-	return "mock-run-123", nil
-}
-
-func (m *mockProvider) GetRunResult(ctx context.Context, cfg *provider.PluginConfig, runID string) (*provider.RunResult, error) {
-	if m.getRunResultFn != nil {
-		return m.getRunResultFn(ctx, cfg, runID)
-	}
-	return &provider.RunResult{State: provider.Running}, nil
-}
-
-func (m *mockProvider) StopRun(ctx context.Context, cfg *provider.PluginConfig, runID string) error {
-	if m.stopRunFn != nil {
-		return m.stopRunFn(ctx, cfg, runID)
-	}
-	return nil
-}
+// mockProvider is a type alias for the shared mock, keeping test callsites concise.
+type mockProvider = providertest.MockProvider
 
 // --- Helpers ---
 
@@ -114,7 +87,7 @@ func TestGarbageCollect_ReturnsNilRpcError(t *testing.T) {
 func TestRun_WithTestIdTriggersProvider(t *testing.T) {
 	triggered := false
 	mock := &mockProvider{
-		triggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
 			triggered = true
 			assert.Equal(t, "42", cfg.TestID)
 			return "run-999", nil
@@ -131,7 +104,7 @@ func TestRun_WithTestIdTriggersProvider(t *testing.T) {
 func TestRun_WithTestRunIdSkipsTrigger(t *testing.T) {
 	triggered := false
 	mock := &mockProvider{
-		triggerRunFn: func(_ context.Context, _ *provider.PluginConfig) (string, error) {
+		TriggerRunFn: func(_ context.Context, _ *provider.PluginConfig) (string, error) {
 			triggered = true
 			return "", nil
 		},
@@ -155,7 +128,7 @@ func TestRun_MissingConfigFields_ReturnsPhaseError(t *testing.T) {
 
 func TestRun_ProviderTriggerRunError(t *testing.T) {
 	mock := &mockProvider{
-		triggerRunFn: func(_ context.Context, _ *provider.PluginConfig) (string, error) {
+		TriggerRunFn: func(_ context.Context, _ *provider.PluginConfig) (string, error) {
 			return "", fmt.Errorf("api error: 500")
 		},
 	}
@@ -169,7 +142,7 @@ func TestRun_ProviderTriggerRunError(t *testing.T) {
 
 func TestResume_ThresholdsPassed(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, runID string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, runID string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:            provider.Passed,
 				TestRunURL:       "https://app.k6.io/runs/" + runID,
@@ -186,7 +159,7 @@ func TestResume_ThresholdsPassed(t *testing.T) {
 
 func TestResume_ThresholdsFailed(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, runID string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, runID string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:            provider.Failed,
 				TestRunURL:       "https://app.k6.io/runs/" + runID,
@@ -205,7 +178,7 @@ func TestResume_ThresholdsFailed(t *testing.T) {
 
 func TestResume_HTTPReqFailed(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:         provider.Passed,
 				TestRunURL:    "https://app.k6.io/runs/1",
@@ -225,7 +198,7 @@ func TestResume_HTTPReqFailed(t *testing.T) {
 
 func TestResume_HTTPReqDurationP50(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Passed,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -248,7 +221,7 @@ func TestResume_HTTPReqDurationP50(t *testing.T) {
 
 func TestResume_HTTPReqDurationP95(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Passed,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -271,7 +244,7 @@ func TestResume_HTTPReqDurationP95(t *testing.T) {
 
 func TestResume_HTTPReqDurationP99(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Passed,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -294,7 +267,7 @@ func TestResume_HTTPReqDurationP99(t *testing.T) {
 
 func TestResume_HTTPReqDuration_MissingAggregation(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Passed,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -312,7 +285,7 @@ func TestResume_HTTPReqDuration_MissingAggregation(t *testing.T) {
 
 func TestResume_HTTPReqDuration_InvalidAggregation(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Passed,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -332,7 +305,7 @@ func TestResume_HTTPReqDuration_InvalidAggregation(t *testing.T) {
 
 func TestResume_HTTPReqs(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Passed,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -353,7 +326,7 @@ func TestResume_NilMetadata(t *testing.T) {
 	// practice, but the interface contract doesn't prevent it), Resume must not panic
 	// and must initialise the map before writing to it.
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:            provider.Passed,
 				ThresholdsPassed: true,
@@ -380,7 +353,7 @@ func TestResume_NilMetadata(t *testing.T) {
 
 func TestResume_RunningState(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Running,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -395,7 +368,7 @@ func TestResume_RunningState(t *testing.T) {
 
 func TestResume_ErroredState(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Errored,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -411,7 +384,7 @@ func TestResume_ErroredState(t *testing.T) {
 
 func TestResume_AbortedState(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Aborted,
 				TestRunURL: "https://app.k6.io/runs/1",
@@ -429,7 +402,7 @@ func TestResume_AbortedState(t *testing.T) {
 
 func TestResume_AlwaysSetsMetadata(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:            provider.Passed,
 				TestRunURL:       "https://app.k6.io/runs/run-1",
@@ -461,7 +434,7 @@ func TestResume_MissingRunIdInMetadata(t *testing.T) {
 func TestTerminate_WithRunIdCallsStopRun(t *testing.T) {
 	stopped := false
 	mock := &mockProvider{
-		stopRunFn: func(_ context.Context, _ *provider.PluginConfig, runID string) error {
+		StopRunFn: func(_ context.Context, _ *provider.PluginConfig, runID string) error {
 			stopped = true
 			assert.Equal(t, "run-1", runID)
 			return nil
@@ -478,7 +451,7 @@ func TestTerminate_WithRunIdCallsStopRun(t *testing.T) {
 func TestTerminate_WithoutRunIdNoStopRun(t *testing.T) {
 	stopped := false
 	mock := &mockProvider{
-		stopRunFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+		StopRunFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
 			stopped = true
 			return nil
 		},
@@ -497,7 +470,7 @@ func TestTerminate_WithoutRunIdNoStopRun(t *testing.T) {
 
 func TestConfig_InvalidMetricType(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{State: provider.Passed, TestRunURL: "http://x"}, nil
 		},
 	}
@@ -561,7 +534,7 @@ func TestConfig_NeitherTestIdNorTestRunId(t *testing.T) {
 
 func TestConcurrentSafety(t *testing.T) {
 	mock := &mockProvider{
-		getRunResultFn: func(_ context.Context, _ *provider.PluginConfig, runID string) (*provider.RunResult, error) {
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, runID string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:            provider.Passed,
 				TestRunURL:       "https://app.k6.io/runs/" + runID,
