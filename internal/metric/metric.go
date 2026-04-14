@@ -23,6 +23,11 @@ var _ rpc.MetricProviderPlugin = (*K6MetricProvider)(nil)
 // pluginName must match the name in argo-rollouts-config ConfigMap.
 const pluginName = "jmichalek132/k6"
 
+// providerCallTimeout is the maximum duration for any single provider API call.
+// The HTTP client has its own 30s timeout, but this context timeout ensures the
+// plugin goroutine is never blocked indefinitely if the provider hangs.
+const providerCallTimeout = 60 * time.Second
+
 // K6MetricProvider implements the RpcMetricProvider interface for k6 metrics.
 // It is stateless -- all per-measurement state lives in Measurement.Metadata.
 type K6MetricProvider struct {
@@ -71,7 +76,8 @@ func (k *K6MetricProvider) Run(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metric) 
 		return metricutil.MarkMeasurementError(measurement, err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), providerCallTimeout)
+	defer cancel()
 	var runID string
 
 	if cfg.TestRunID != "" {
@@ -112,7 +118,8 @@ func (k *K6MetricProvider) Resume(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metri
 		return metricutil.MarkMeasurementError(measurement, fmt.Errorf("runId not found in measurement metadata"))
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), providerCallTimeout)
+	defer cancel()
 	result, err := k.provider.GetRunResult(ctx, cfg, runID)
 	if err != nil {
 		return metricutil.MarkMeasurementError(measurement, err)
@@ -173,7 +180,8 @@ func (k *K6MetricProvider) Terminate(_ *v1alpha1.AnalysisRun, metric v1alpha1.Me
 
 	runID := measurement.Metadata["runId"]
 	if runID != "" {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), providerCallTimeout)
+		defer cancel()
 		if err := k.provider.StopRun(ctx, cfg, runID); err != nil {
 			slog.Warn("failed to stop run during terminate",
 				"runId", runID,

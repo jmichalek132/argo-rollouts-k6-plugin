@@ -29,6 +29,9 @@ const (
 
 	// requeueAfter is the fixed requeue interval for active runs (D-04).
 	requeueAfter = 15 * time.Second
+
+	// providerCallTimeout is the maximum duration for any single provider API call.
+	providerCallTimeout = 60 * time.Second
 )
 
 // stepState holds the persisted state across Run() calls via RpcStepContext.Status.
@@ -102,7 +105,9 @@ func (k *K6StepPlugin) Run(_ *v1alpha1.Rollout, ctx *types.RpcStepContext) (type
 			)
 		} else {
 			// Trigger mode: start a new run.
-			runID, err := k.provider.TriggerRun(context.Background(), cfg)
+			triggerCtx, triggerCancel := context.WithTimeout(context.Background(), providerCallTimeout)
+			defer triggerCancel()
+			runID, err := k.provider.TriggerRun(triggerCtx, cfg)
 			if err != nil {
 				return types.RpcStepResult{}, types.RpcError{
 					ErrorString: fmt.Sprintf("trigger run: %v", err),
@@ -126,7 +131,9 @@ func (k *K6StepPlugin) Run(_ *v1alpha1.Rollout, ctx *types.RpcStepContext) (type
 	elapsed := time.Since(triggeredAt)
 	if elapsed > timeout {
 		// Timeout exceeded: stop the run and fail.
-		if stopErr := k.provider.StopRun(context.Background(), cfg, state.RunID); stopErr != nil {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), providerCallTimeout)
+		defer stopCancel()
+		if stopErr := k.provider.StopRun(stopCtx, cfg, state.RunID); stopErr != nil {
 			slog.Warn("failed to stop run on timeout",
 				"runId", state.RunID,
 				"error", stopErr,
@@ -142,7 +149,9 @@ func (k *K6StepPlugin) Run(_ *v1alpha1.Rollout, ctx *types.RpcStepContext) (type
 	}
 
 	// Poll the run result.
-	result, err := k.provider.GetRunResult(context.Background(), cfg, state.RunID)
+	pollCtx, pollCancel := context.WithTimeout(context.Background(), providerCallTimeout)
+	defer pollCancel()
+	result, err := k.provider.GetRunResult(pollCtx, cfg, state.RunID)
 	if err != nil {
 		return types.RpcStepResult{}, types.RpcError{
 			ErrorString: fmt.Sprintf("get run result: %v", err),
@@ -224,7 +233,9 @@ func (k *K6StepPlugin) stopActiveRun(ctx *types.RpcStepContext, action string) {
 		return
 	}
 
-	if err := k.provider.StopRun(context.Background(), cfg, state.RunID); err != nil {
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), providerCallTimeout)
+	defer stopCancel()
+	if err := k.provider.StopRun(stopCtx, cfg, state.RunID); err != nil {
 		slog.Warn("failed to stop run during "+action,
 			"runId", state.RunID,
 			"error", err,
