@@ -2,6 +2,10 @@ MODULE := github.com/jmichalek132/argo-rollouts-k6-plugin
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
+# Default to Colima socket for local macOS dev; CI runners and standard Docker
+# installs leave DOCKER_HOST unset or set it to the standard /var/run/docker.sock.
+DOCKER_HOST ?= unix://$(HOME)/.colima/default/docker.sock
+
 .PHONY: build build-metric build-step test test-e2e test-e2e-live lint lint-stdout clean
 
 build: build-metric build-step
@@ -16,11 +20,11 @@ test:
 	GOPATH="$(HOME)/go" go test -race -v -count=1 ./...
 
 test-e2e:
-	GOPATH="$(HOME)/go" DOCKER_HOST="unix://$(HOME)/.colima/default/docker.sock" \
+	GOPATH="$(HOME)/go" DOCKER_HOST="$(DOCKER_HOST)" \
 	go test -v -tags=e2e -count=1 -timeout=15m ./e2e/...
 
 test-e2e-live:
-	GOPATH="$(HOME)/go" DOCKER_HOST="unix://$(HOME)/.colima/default/docker.sock" \
+	GOPATH="$(HOME)/go" DOCKER_HOST="$(DOCKER_HOST)" \
 	K6_LIVE_TEST=true \
 	K6_CLOUD_TOKEN=$(K6_CLOUD_TOKEN) \
 	K6_STACK_ID=$(K6_STACK_ID) \
