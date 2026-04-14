@@ -40,7 +40,9 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   1. e2e GitHub Actions workflow installs the `kind` binary before test execution
   2. e2e workflow passes the `-timeout=15m` flag to `go test`, matching the Makefile `test-e2e` target
   3. A push to main triggers the e2e workflow and it completes without timeout or missing-binary errors
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 05-01-PLAN.md — Fix Makefile DOCKER_HOST and e2e workflow (kind install + make targets)
 
 ### Phase 6: Automated Dependency Management
 **Goal**: Go module and GitHub Actions dependencies receive automated update PRs via Renovate
@@ -60,5 +62,5 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 2. Metric Plugin | v1.0 | 2/2 | Complete | 2026-04-10 |
 | 3. Step Plugin | v1.0 | 2/2 | Complete | 2026-04-10 |
 | 4. Release & Examples | v1.0 | 3/3 | Complete | 2026-04-10 |
-| 5. CI Pipeline Fix | v0.2.0 | 0/0 | Not started | - |
+| 5. CI Pipeline Fix | v0.2.0 | 0/1 | Planned | - |
 | 6. Automated Dependency Management | v0.2.0 | 0/0 | Not started | - |
