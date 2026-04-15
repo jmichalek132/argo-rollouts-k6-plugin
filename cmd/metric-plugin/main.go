@@ -9,7 +9,9 @@ import (
 	goPlugin "github.com/hashicorp/go-plugin"
 
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/metric"
+	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/cloud"
+	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/operator"
 )
 
 // version is set at build time via LDFLAGS: -X main.version={{.Version}}
@@ -28,13 +30,20 @@ func main() {
 	setupLogging()
 	slog.Info("starting metric plugin", "version", version)
 
-	// Create provider and metric plugin implementation.
-	var opts []cloud.Option
+	// Create providers (per D-03).
+	var cloudOpts []cloud.Option
 	if baseURL := os.Getenv("K6_BASE_URL"); baseURL != "" {
-		opts = append(opts, cloud.WithBaseURL(baseURL))
+		cloudOpts = append(cloudOpts, cloud.WithBaseURL(baseURL))
 	}
-	p := cloud.NewGrafanaCloudProvider(opts...)
-	impl := metric.New(p)
+	cloudProvider := cloud.NewGrafanaCloudProvider(cloudOpts...)
+	operatorProvider := operator.NewK6OperatorProvider()
+
+	// Create router -- dispatches to correct backend based on cfg.Provider field.
+	router := provider.NewRouter(
+		provider.WithProvider("grafana-cloud", cloudProvider),
+		provider.WithProvider("k6-operator", operatorProvider),
+	)
+	impl := metric.New(router)
 
 	// Serve() prints handshake to stdout, then redirects os.Stdout to a pipe. // stdout-ok
 	// NOTHING must write to stdout before this line. // stdout-ok
