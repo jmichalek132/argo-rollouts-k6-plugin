@@ -513,17 +513,19 @@ func TestReadScript_Success(t *testing.T) {
 | A2 | ConfigMap namespace defaults to "default" when empty string is passed to client-go | Pitfall 3 | MEDIUM -- ConfigMap lookups would silently go to wrong namespace. Easy to test |
 | A3 | `fake.NewSimpleClientset` is sufficient for Phase 7 tests (no apply configuration needed) | State of the Art | LOW -- can switch to NewClientset if needed |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Namespace sourcing for k6-operator provider**
    - What we know: D-09 says "Namespace defaults to the rollout's namespace." The metric plugin receives `*v1alpha1.AnalysisRun` (which has namespace in ObjectMeta) and the step plugin receives `*v1alpha1.Rollout` (also has namespace).
    - What's unclear: Should the namespace be extracted in the metric/step plugin layer and set on PluginConfig before calling the provider? Or should the provider receive the namespace separately?
    - Recommendation: The cleanest approach is to have the metric/step plugin extract the namespace from the AnalysisRun/Rollout ObjectMeta and populate `cfg.Namespace` if it's empty, before calling provider methods. This keeps the provider layer namespace-agnostic. However, current `parseConfig` functions don't receive the AnalysisRun/Rollout namespace. This needs a small change in Phase 7 or can be deferred to Phase 8 when the namespace is actually used for TestRun creation.
+   - RESOLVED: Phase 7 uses cfg.Namespace with fallback to "default". Rollout namespace injection deferred to Phase 8 when namespace is consumed for TestRun CR creation.
 
 2. **Per-provider validation method signature**
    - What we know: D-05 says each provider implements `Validate(cfg *PluginConfig) error`. Current code has no Validate method -- validation is inline in `parseConfig()`.
    - What's unclear: Should `Validate` be added to the `provider.Provider` interface, or should it be a separate interface that the Router checks for?
    - Recommendation: Add `Validate` to the Router's dispatch flow as a separate interface (`Validator`) that providers optionally implement. This avoids changing the Provider interface (which would require updating existing mock/tests). The Router checks `if v, ok := p.(Validator); ok { err := v.Validate(cfg) }`.
+   - RESOLVED: Plan 01 uses IsGrafanaCloud() helper inline in parseConfig() to gate Grafana Cloud field validation. Plan 02 adds a Validate() method on K6OperatorProvider outside the Provider interface to avoid changing the interface contract.
 
 ## Environment Availability
 
