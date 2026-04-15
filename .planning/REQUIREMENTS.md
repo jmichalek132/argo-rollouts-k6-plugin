@@ -75,28 +75,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | — | Pending |
-| FOUND-02 | — | Pending |
-| FOUND-03 | — | Pending |
-| K6OP-01 | — | Pending |
-| K6OP-02 | — | Pending |
-| K6OP-03 | — | Pending |
-| K6OP-04 | — | Pending |
-| K6OP-05 | — | Pending |
-| K6OP-06 | — | Pending |
-| K6OP-07 | — | Pending |
-| K6OP-08 | — | Pending |
-| METR-01 | — | Pending |
-| METR-02 | — | Pending |
-| DOCS-01 | — | Pending |
-| DOCS-02 | — | Pending |
-| TEST-01 | — | Pending |
+| FOUND-01 | Phase 7 | Pending |
+| FOUND-02 | Phase 7 | Pending |
+| FOUND-03 | Phase 7 | Pending |
+| K6OP-01 | Phase 8 | Pending |
+| K6OP-02 | Phase 8 | Pending |
+| K6OP-03 | Phase 8 | Pending |
+| K6OP-04 | Phase 8 | Pending |
+| K6OP-05 | Phase 8 | Pending |
+| K6OP-06 | Phase 8 | Pending |
+| K6OP-07 | Phase 8 | Pending |
+| K6OP-08 | Phase 8 | Pending |
+| METR-01 | Phase 9 | Pending |
+| METR-02 | Phase 9 | Pending |
+| DOCS-01 | Phase 10 | Pending |
+| DOCS-02 | Phase 10 | Pending |
+| TEST-01 | Phase 10 | Pending |
 
 **Coverage:**
 - v0.3.0 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-15*
-*Last updated: 2026-04-15 after initial definition*
+*Last updated: 2026-04-15 after roadmap creation*
