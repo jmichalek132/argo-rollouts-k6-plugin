@@ -55,7 +55,7 @@ Full details: [milestones/v0.2.0-ROADMAP.md](milestones/v0.2.0-ROADMAP.md)
   3. Plugin reads a k6 .js script body from a ConfigMap by name and key, and that script content is available to downstream providers via the readScript internal method (consumed by Phase 8 TriggerRun for TestRun CR creation)
 **Plans:** 2 plans
 Plans:
-- [ ] 07-01-PLAN.md -- Config extension, Router multiplexer, per-provider parseConfig validation, k8s dependency promotion
+- [x] 07-01-PLAN.md -- Config extension, Router multiplexer, per-provider parseConfig validation, k8s dependency promotion
 - [ ] 07-02-PLAN.md -- K6OperatorProvider with lazy k8s client and ConfigMap reading, main.go wiring
 
 ### Phase 8: k6-operator Provider
