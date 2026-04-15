@@ -68,7 +68,10 @@ Plans:
   3. Plugin supports namespace targeting, parallelism, resource limits, custom runner image, and environment variable injection via plugin config fields
   4. Plugin deletes the TestRun CR when the rollout is aborted or terminated, stopping all running k6 pods
   5. Created TestRun CRs use consistent naming (`k6-<rollout>-<hash>`) and carry `app.kubernetes.io/managed-by` labels
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 08-01-PLAN.md -- k6-operator dep, PluginConfig extension, TestRun CR construction helpers, exit code mapping
+- [ ] 08-02-PLAN.md -- TriggerRun/GetRunResult/StopRun implementation with dynamic client
 
 ### Phase 9: Metric Integration
 **Goal**: Metric plugin extracts k6 result metrics from in-cluster test runs for AnalysisTemplate successCondition evaluation
@@ -103,6 +106,6 @@ Phases execute in numeric order: 7 → 8 → 9 → 10
 | 5. CI Pipeline Fix | v0.2.0 | 1/1 | Complete | 2026-04-15 |
 | 6. Automated Dependency Management | v0.2.0 | 1/1 | Complete | 2026-04-15 |
 | 7. Foundation & Kubernetes Client | v0.3.0 | 0/2 | Not started | - |
-| 8. k6-operator Provider | v0.3.0 | 0/0 | Not started | - |
+| 8. k6-operator Provider | v0.3.0 | 0/2 | Not started | - |
 | 9. Metric Integration | v0.3.0 | 0/0 | Not started | - |
 | 10. Documentation & E2E | v0.3.0 | 0/0 | Not started | - |
