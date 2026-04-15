@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.2.0
-milestone_name: Hardening
-status: completed
-stopped_at: Phase 5 complete — CI Pipeline Fix
-last_updated: "2026-04-14T23:07:35.264Z"
-last_activity: 2026-04-14
+milestone: v0.3.0
+milestone_name: In-Cluster Execution
+status: active
+stopped_at: Defining requirements
+last_updated: "2026-04-15"
+last_activity: 2026-04-15
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-15)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Milestone v0.2.0 Hardening — Phase 5 complete
+**Current focus:** Milestone v0.3.0 In-Cluster Execution — Defining requirements
 
 ## Current Position
 
-Phase: 5 of 6 (CI Pipeline Fix)
-Plan: 1 of 1
-Status: Complete
-Last activity: 2026-04-14
-
-Progress: [██████████████████████] 1/1 plans (100%)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-15 — Milestone v0.3.0 started
 
 ## Performance Metrics
 
@@ -72,9 +70,3 @@ None.
 ### Blockers/Concerns
 
 None.
-
-## Session Continuity
-
-Last session: 2026-04-14T22:55:49.915Z
-Stopped at: Phase 5 complete — CI Pipeline Fix
-Resume file: .planning/phases/05-ci-pipeline-fix/05-VERIFICATION.md

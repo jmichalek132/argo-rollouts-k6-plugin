@@ -8,6 +8,16 @@ An open-source Argo Rollouts plugin written in Go that integrates k6 load testin
 
 Rollouts automatically pass or roll back based on real load test results — no manual gates, no guesswork.
 
+## Current Milestone: v0.3.0 In-Cluster Execution
+
+**Goal:** Enable k6 test execution inside the Kubernetes cluster and decouple script sourcing from Grafana Cloud test IDs.
+
+**Target features:**
+- ConfigMap script sourcing — k6 .js scripts loaded from Kubernetes ConfigMaps
+- Kubernetes Job provider — run k6 as a `batch/v1` Job in-cluster
+- k6-operator CRD support — trigger `TestRun` CRs for distributed k6 execution
+- Local binary execution research — investigate running k6 as a subprocess of the plugin process
+
 ## Current State
 
 Shipped **v0.2.0** on 2026-04-15. CI pipeline hardened, automated dependency management enabled.
@@ -35,10 +45,14 @@ Shipped **v0.2.0** on 2026-04-15. CI pipeline hardened, automated dependency man
 
 ### Active
 
-- [ ] Test script sourcing (v2): k6 .js script stored in a Kubernetes ConfigMap
+- [ ] ConfigMap script sourcing: k6 .js script stored in a Kubernetes ConfigMap, referenced by name/key in plugin config
+- [ ] In-cluster k6 Job execution: KubernetesJobProvider creates `batch/v1` Jobs with k6 container
+- [ ] k6-operator CRD support: trigger `TestRun` CRs via grafana/k6-operator for distributed execution
+- [ ] Local binary execution research: investigate running k6 as a subprocess of the plugin process
+
+### Deferred
+
 - [ ] Step plugin secret handling: step plugin config has no secretKeyRef support; API tokens visible in Rollout spec and dashboard UI — upstream Argo Rollouts limitation
-- [ ] In-cluster k6 Job execution via KubernetesJobProvider
-- [ ] Direct k6 binary execution via LocalBinaryProvider
 - [ ] Custom k6 metric support (user-defined Counter/Gauge/Rate/Trend)
 
 ### Out of Scope
@@ -99,4 +113,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-15 after v0.2.0 milestone*
+*Last updated: 2026-04-15 after v0.3.0 milestone start*
