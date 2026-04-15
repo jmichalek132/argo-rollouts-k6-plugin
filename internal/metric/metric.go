@@ -219,14 +219,8 @@ func parseConfig(metric v1alpha1.Metric) (*provider.PluginConfig, error) {
 
 	// Per-provider validation (per D-05).
 	if cfg.IsGrafanaCloud() {
-		if cfg.TestID == "" && cfg.TestRunID == "" {
-			return nil, fmt.Errorf("either testId or testRunId is required")
-		}
-		if cfg.APIToken == "" {
-			return nil, fmt.Errorf("apiToken is required (check Secret reference)")
-		}
-		if cfg.StackID == "" {
-			return nil, fmt.Errorf("stackId is required (check Secret reference)")
+		if err := cfg.ValidateGrafanaCloud(); err != nil {
+			return nil, err
 		}
 	} else if cfg.Provider == "k6-operator" {
 		if err := cfg.ValidateK6Operator(); err != nil {

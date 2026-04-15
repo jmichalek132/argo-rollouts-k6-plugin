@@ -33,6 +33,23 @@ func (c *PluginConfig) IsGrafanaCloud() bool {
 	return c.Provider == "" || c.Provider == "grafana-cloud"
 }
 
+// ValidateGrafanaCloud checks Grafana Cloud-specific config fields.
+// This is the single source of truth for Grafana Cloud field validation.
+// Called by parseConfig in both metric.go and step.go (centralized to prevent
+// drift -- parallel to ValidateK6Operator).
+func (c *PluginConfig) ValidateGrafanaCloud() error {
+	if c.TestID == "" && c.TestRunID == "" {
+		return fmt.Errorf("either testId or testRunId is required")
+	}
+	if c.APIToken == "" {
+		return fmt.Errorf("apiToken is required (check Secret reference)")
+	}
+	if c.StackID == "" {
+		return fmt.Errorf("stackId is required (check Secret reference)")
+	}
+	return nil
+}
+
 // ValidateK6Operator checks k6-operator-specific config fields.
 // This is the single source of truth for k6-operator field validation.
 // Called by parseConfig in both metric.go and step.go (centralized to prevent

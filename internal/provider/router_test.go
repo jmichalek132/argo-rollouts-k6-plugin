@@ -152,6 +152,58 @@ func TestPluginConfig_IsGrafanaCloud(t *testing.T) {
 	}
 }
 
+// --- ValidateGrafanaCloud tests ---
+
+func TestPluginConfig_ValidateGrafanaCloud_Valid(t *testing.T) {
+	cfg := &PluginConfig{
+		TestID:   "42",
+		APIToken: "tok",
+		StackID:  "123",
+	}
+	err := cfg.ValidateGrafanaCloud()
+	assert.NoError(t, err)
+}
+
+func TestPluginConfig_ValidateGrafanaCloud_ValidWithTestRunId(t *testing.T) {
+	cfg := &PluginConfig{
+		TestRunID: "run-1",
+		APIToken:  "tok",
+		StackID:   "123",
+	}
+	err := cfg.ValidateGrafanaCloud()
+	assert.NoError(t, err)
+}
+
+func TestPluginConfig_ValidateGrafanaCloud_MissingTestIdAndTestRunId(t *testing.T) {
+	cfg := &PluginConfig{
+		APIToken: "tok",
+		StackID:  "123",
+	}
+	err := cfg.ValidateGrafanaCloud()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "testId")
+}
+
+func TestPluginConfig_ValidateGrafanaCloud_MissingAPIToken(t *testing.T) {
+	cfg := &PluginConfig{
+		TestID:  "42",
+		StackID: "123",
+	}
+	err := cfg.ValidateGrafanaCloud()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "apiToken")
+}
+
+func TestPluginConfig_ValidateGrafanaCloud_MissingStackId(t *testing.T) {
+	cfg := &PluginConfig{
+		TestID:   "42",
+		APIToken: "tok",
+	}
+	err := cfg.ValidateGrafanaCloud()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stackId")
+}
+
 // --- ValidateK6Operator tests ---
 
 func TestPluginConfig_ValidateK6Operator_Valid(t *testing.T) {
