@@ -527,6 +527,50 @@ func TestAbort_StopRunError(t *testing.T) {
 	assert.Equal(t, types.RpcStepResult{}, result)
 }
 
+// --- k6-operator config validation tests ---
+
+func TestParseConfig_K6OperatorValid(t *testing.T) {
+	// k6-operator config without apiToken/stackId/testId must pass parseConfig.
+	// Addresses HIGH review concern: config validation trap.
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, _ *provider.PluginConfig) (string, error) {
+			return "", fmt.Errorf("k6-operator provider not yet implemented")
+		},
+	}
+	cfg := map[string]interface{}{
+		"provider": "k6-operator",
+		"configMapRef": map[string]interface{}{
+			"name": "k6-scripts",
+			"key":  "test.js",
+		},
+		"namespace": "test-ns",
+	}
+	cfgBytes, _ := json.Marshal(cfg)
+	ctx := makeContext(cfgBytes, nil)
+	p := New(mock)
+	_, rpcErr := p.Run(nil, ctx)
+	// The error should come from the provider, not from config validation.
+	// If rpcErr is set, it should NOT be about apiToken/stackId.
+	if rpcErr.HasError() {
+		assert.NotContains(t, rpcErr.ErrorString, "apiToken")
+		assert.NotContains(t, rpcErr.ErrorString, "stackId")
+		assert.NotContains(t, rpcErr.ErrorString, "testId")
+	}
+}
+
+func TestParseConfig_K6OperatorMissingConfigMapRef(t *testing.T) {
+	cfg := map[string]interface{}{
+		"provider": "k6-operator",
+	}
+	cfgBytes, _ := json.Marshal(cfg)
+	ctx := makeContext(cfgBytes, nil)
+	p := New(&mockProvider{})
+	result, rpcErr := p.Run(nil, ctx)
+	assert.False(t, rpcErr.HasError())
+	assert.Equal(t, types.PhaseFailed, result.Phase)
+	assert.Contains(t, result.Message, "configMapRef")
+}
+
 // --- Run: infrastructure error tests ---
 
 func TestRun_TriggerError(t *testing.T) {

@@ -244,6 +244,10 @@ func (k *K6StepPlugin) stopActiveRun(ctx *types.RpcStepContext, action string) {
 }
 
 // parseConfig extracts and validates the plugin config from the step context.
+// Validation is per-provider (per D-05). Grafana Cloud fields are only required
+// when provider is empty or "grafana-cloud". k6-operator fields are validated
+// via cfg.ValidateK6Operator() (centralized in config.go to prevent drift).
+// Unknown providers pass parseConfig; the Router rejects them at dispatch time.
 func (k *K6StepPlugin) parseConfig(ctx *types.RpcStepContext) (*provider.PluginConfig, error) {
 	if ctx == nil || len(ctx.Config) == 0 {
 		return nil, fmt.Errorf("step context or config is nil")
@@ -254,15 +258,23 @@ func (k *K6StepPlugin) parseConfig(ctx *types.RpcStepContext) (*provider.PluginC
 		return nil, fmt.Errorf("unmarshal plugin config: %w", err)
 	}
 
-	if cfg.TestID == "" && cfg.TestRunID == "" {
-		return nil, fmt.Errorf("either testId or testRunId is required")
+	// Per-provider validation (per D-05).
+	if cfg.IsGrafanaCloud() {
+		if cfg.TestID == "" && cfg.TestRunID == "" {
+			return nil, fmt.Errorf("either testId or testRunId is required")
+		}
+		if cfg.APIToken == "" {
+			return nil, fmt.Errorf("apiToken is required (check Secret reference)")
+		}
+		if cfg.StackID == "" {
+			return nil, fmt.Errorf("stackId is required (check Secret reference)")
+		}
+	} else if cfg.Provider == "k6-operator" {
+		if err := cfg.ValidateK6Operator(); err != nil {
+			return nil, err
+		}
 	}
-	if cfg.APIToken == "" {
-		return nil, fmt.Errorf("apiToken is required (check Secret reference)")
-	}
-	if cfg.StackID == "" {
-		return nil, fmt.Errorf("stackId is required (check Secret reference)")
-	}
+	// Unknown providers pass parseConfig; the Router rejects them at dispatch.
 
 	return &cfg, nil
 }

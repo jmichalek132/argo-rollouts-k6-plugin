@@ -13,10 +13,10 @@ import (
 // We cannot import providertest (circular dependency: provider -> providertest -> provider),
 // so we define a lightweight mock here.
 type internalMock struct {
-	name           string
-	triggerCalled  bool
+	name            string
+	triggerCalled   bool
 	getResultCalled bool
-	stopCalled     bool
+	stopCalled      bool
 }
 
 func (m *internalMock) TriggerRun(_ context.Context, _ *PluginConfig) (string, error) {

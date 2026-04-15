@@ -530,6 +530,59 @@ func TestConfig_NeitherTestIdNorTestRunId(t *testing.T) {
 	assert.Contains(t, m.Message, "testId")
 }
 
+// --- k6-operator config validation tests ---
+
+func TestConfig_K6OperatorValidConfig(t *testing.T) {
+	// k6-operator config without apiToken/stackId/testId must pass parseConfig.
+	// Addresses HIGH review concern: config validation trap.
+	k := New(&mockProvider{
+		TriggerRunFn: func(_ context.Context, _ *provider.PluginConfig) (string, error) {
+			return "", fmt.Errorf("k6-operator provider not yet implemented")
+		},
+	})
+	cfg := map[string]interface{}{
+		"provider": "k6-operator",
+		"metric":   "thresholds",
+		"configMapRef": map[string]interface{}{
+			"name": "k6-scripts",
+			"key":  "test.js",
+		},
+		"namespace": "test-ns",
+	}
+	m := k.Run(nil, testMetric(cfg))
+	// Should NOT fail on missing apiToken/stackId. The error should come from the
+	// provider stub ("not yet implemented"), not from config validation.
+	assert.NotContains(t, m.Message, "apiToken")
+	assert.NotContains(t, m.Message, "stackId")
+	assert.NotContains(t, m.Message, "testId")
+}
+
+func TestConfig_K6OperatorMissingConfigMapRef(t *testing.T) {
+	k := New(&mockProvider{})
+	cfg := map[string]interface{}{
+		"provider": "k6-operator",
+		"metric":   "thresholds",
+	}
+	m := k.Run(nil, testMetric(cfg))
+	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
+	assert.Contains(t, m.Message, "configMapRef")
+}
+
+func TestConfig_K6OperatorMissingMetric(t *testing.T) {
+	// metric field is still required for k6-operator in metric plugin.
+	k := New(&mockProvider{})
+	cfg := map[string]interface{}{
+		"provider": "k6-operator",
+		"configMapRef": map[string]interface{}{
+			"name": "k6-scripts",
+			"key":  "test.js",
+		},
+	}
+	m := k.Run(nil, testMetric(cfg))
+	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
+	assert.Contains(t, m.Message, "metric")
+}
+
 // --- Concurrent safety test ---
 
 func TestConcurrentSafety(t *testing.T) {
