@@ -1,466 +1,413 @@
-# Feature Landscape
+# Feature Landscape: v0.3.0 In-Cluster Execution
 
-**Domain:** Argo Rollouts k6 Load Testing Plugin (Metric + Step)
-**Researched:** 2026-04-09
+**Domain:** Argo Rollouts k6 Load Testing Plugin -- In-Cluster Execution Features
+**Researched:** 2026-04-15
+**Scope:** NEW features only. Existing Grafana Cloud provider, metric plugin (4 metric types), step plugin (fire-and-wait), e2e suite, and GoReleaser pipeline are shipped.
 
 ## Table Stakes
 
-Features users expect. Missing = plugin feels incomplete or unusable.
+Features users expect when transitioning from cloud-only to in-cluster k6 execution.
 
-### TS-1: Metric Plugin -- k6 Cloud Test Metrics Polling
+### TS-1: ConfigMap Script Sourcing
 
 | Aspect | Detail |
 |---------|--------|
-| **Why Expected** | This is the core value proposition. Every Argo Rollouts metric plugin (Datadog, Prometheus, NewRelic, OpenSearch) returns metric values for `successCondition`/`failureCondition` evaluation. Without this, the plugin has no reason to exist. |
+| **Why Expected** | Users who self-host k6 (no Grafana Cloud) have no way to use the plugin today. ConfigMap is the standard Kubernetes pattern for small configuration/script data. The k6-operator itself uses `spec.script.configMap` as its primary script source. Every user expects to reference a k6 script from a ConfigMap name + key. |
 | **Complexity** | Medium |
-| **Notes** | Must implement `RpcMetricProvider` interface: `InitPlugin`, `Run`, `Resume`, `Terminate`, `GarbageCollect`, `Type`, `GetMetadata`. The `Run` method starts a measurement, `Resume` polls for results. Return values go into `result` for expression evaluation. |
+| **Dependencies** | Requires K8s API access (client-go). Depends on existing `Provider` interface -- new providers consume ConfigMap-sourced scripts. |
+| **Notes** | ConfigMaps have a 1 MiB size limit (etcd constraint). Most k6 scripts are 1-50 KB, so this covers 95%+ of use cases. Multi-file imports (k6 modules) are NOT supported via ConfigMap -- only single-file scripts. This is a known limitation shared with k6-operator's configMap mode. |
 
-**AnalysisTemplate YAML:**
+**Plugin Config (step plugin):**
 
 ```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: AnalysisTemplate
+- plugin:
+    name: argo-rollouts-k6-plugin/step
+    config:
+      provider: kubernetes-job    # or k6-operator
+      script:
+        configMap:
+          name: k6-load-test
+          key: script.js
+      namespace: load-testing     # optional, defaults to rollout namespace
+      timeout: 10m
+```
+
+**Plugin Config (metric plugin via AnalysisTemplate):**
+
+```yaml
+provider:
+  plugin:
+    argo-rollouts-k6-plugin/metric:
+      provider: kubernetes-job
+      testRunId: "{{ args.job-name }}"
+      script:
+        configMap:
+          name: k6-load-test
+          key: script.js
+      metric: thresholds
+```
+
+**Implementation pattern:**
+1. Plugin calls `clientset.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})`
+2. Extracts `data[key]` as the script content (string)
+3. Passes script content to the provider's execution mechanism (Job spec or TestRun CR)
+4. For Job provider: mounts as a volume in the Job pod spec
+5. For k6-operator: creates a ConfigMap in the target namespace (if not already the source ConfigMap)
+
+**Confidence:** HIGH -- ConfigMap API is stable K8s core, k6-operator uses identical pattern.
+
+### TS-2: Kubernetes Job Provider (batch/v1)
+
+| Aspect | Detail |
+|---------|--------|
+| **Why Expected** | The simplest in-cluster execution model. Users who cannot or choose not to install the k6-operator still need a way to run k6 in-cluster. A single `batch/v1` Job with the `grafana/k6` container image running a script is the most portable and least-dependency approach. |
+| **Complexity** | High |
+| **Dependencies** | TS-1 (ConfigMap script sourcing), client-go (already indirect dep at v0.34.1), RBAC configuration for controller service account. |
+| **Notes** | The plugin runs as a child process of the Argo Rollouts controller and inherits its service account token. Confirmed pattern: the Gateway API traffic router plugin (`argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi`) uses `clientcmd.NewDefaultClientConfigLoadingRules()` in `InitPlugin()` to create a K8s client, then uses it to create/modify K8s resources. Same approach works here. |
+
+**Execution lifecycle:**
+
+1. **Create:** Plugin constructs a `batch/v1.Job` spec with `grafana/k6` image, mounts script from ConfigMap, sets `k6 run /scripts/script.js` as command
+2. **Poll:** Plugin watches Job status via `clientset.BatchV1().Jobs(ns).Get()`, checking `.status.conditions` for `Complete` (type=Complete, status=True) or `Failed` (type=Failed, status=True)
+3. **Result extraction:** k6 exits with code 0 (pass) or 99 (threshold breach). Job propagates container exit code. Plugin reads exit code from `.status.containerStatuses[0].state.terminated.exitCode` on the pod
+4. **Cleanup:** Plugin deletes the Job (with `propagationPolicy: Background` to clean pods) after result extraction
+5. **Abort/Terminate:** Plugin deletes the Job to stop execution
+
+**Job spec template (generated by plugin):**
+
+```yaml
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: k6-error-rate
+  name: k6-run-<rollout>-<hash>
+  namespace: <target-namespace>
+  labels:
+    app.kubernetes.io/managed-by: argo-rollouts-k6-plugin
+    argo-rollouts.argoproj.io/rollout: <rollout-name>
 spec:
-  args:
-    - name: test-run-id
-    - name: k6-api-token
-      valueFrom:
-        secretKeyRef:
-          name: k6-cloud-credentials
-          key: api-token
-    - name: k6-stack-id
-      valueFrom:
-        secretKeyRef:
-          name: k6-cloud-credentials
-          key: stack-id
-  metrics:
-    - name: http-error-rate
-      interval: 30s
-      successCondition: "result.httpReqFailedRate < 0.01"
-      failureCondition: "result.httpReqFailedRate >= 0.05"
-      failureLimit: 3
-      provider:
-        plugin:
-          argo-rollouts-k6-plugin/metric:
-            testRunId: "{{ args.test-run-id }}"
-            apiToken: "{{ args.k6-api-token }}"
-            stackId: "{{ args.k6-stack-id }}"
-            metric: http_req_failed
-            aggregation: rate
+  backoffLimit: 0          # no retries -- threshold failure is not transient
+  activeDeadlineSeconds: 600  # from plugin timeout config
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:latest  # configurable
+          command: ["k6", "run", "--quiet", "--summary-export=/tmp/summary.json", "/scripts/script.js"]
+          volumeMounts:
+            - name: k6-script
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: k6-script
+          configMap:
+            name: k6-load-test
 ```
 
-### TS-2: Step Plugin -- Trigger k6 Cloud Test and Wait
+**Result extraction strategy:**
+- **Primary:** Exit code 0 = passed, exit code 99 = thresholds failed, any other = errored
+- **Enhanced (for metric plugin):** Use `handleSummary()` in the k6 script to write JSON to stdout. Plugin reads pod logs via `clientset.CoreV1().Pods(ns).GetLogs()` and parses the JSON summary to extract metrics (p95, error rate, throughput, threshold results)
+- **Fallback:** If no handleSummary output, rely solely on exit code for pass/fail
 
-| Aspect | Detail |
-|---------|--------|
-| **Why Expected** | The "fire-and-forget" use case: trigger a k6 test at a canary step, block the rollout until it completes, return pass/fail. This is the simplest integration model and the first thing users will try. Without it, users must orchestrate test execution externally. |
-| **Complexity** | Medium |
-| **Notes** | Must implement `RpcStep` interface: `Run`, `Terminate`, `Abort`, `Type`. `Run` triggers test via `POST /loadtests/v2/tests/{id}/start-testrun`, returns `PhaseRunning` with `RequeueAfter` to poll. Subsequent `Run` calls check status. Returns `PhaseSuccessful` or `PhaseFailed` based on k6 threshold results. |
-
-**Rollout YAML:**
+**RBAC requirements for controller service account:**
 
 ```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Rollout
-spec:
-  strategy:
-    canary:
-      steps:
-        - setWeight: 20
-        - plugin:
-            name: argo-rollouts-k6-plugin/step
-            config:
-              testId: "12345"
-              apiToken:
-                secretRef:
-                  name: k6-cloud-credentials
-                  key: api-token
-              stackId:
-                secretRef:
-                  name: k6-cloud-credentials
-                  key: stack-id
-              timeout: 10m
-              failOnThresholdBreach: true
-        - setWeight: 50
-```
-
-### TS-3: k6 Threshold Pass/Fail as a Metric
-
-| Aspect | Detail |
-|---------|--------|
-| **Why Expected** | k6 thresholds are the native pass/fail mechanism in k6 scripts. Every k6 user defines thresholds (e.g., `p(95) < 500`, `rate < 0.01`). Exposing the aggregate threshold pass/fail as a single boolean metric is the most natural integration point. Users who already have well-defined k6 scripts should not have to re-define thresholds in AnalysisTemplate YAML. |
-| **Complexity** | Low |
-| **Notes** | Query `/loadtests/v2/thresholds` endpoint. Return `result.thresholdsPassed` boolean. Simple `successCondition: "result == true"`. This is likely the MOST used metric in practice. |
-
-**AnalysisTemplate YAML:**
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: AnalysisTemplate
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
 metadata:
-  name: k6-thresholds-gate
-spec:
-  args:
-    - name: test-run-id
-    - name: k6-api-token
-      valueFrom:
-        secretKeyRef:
-          name: k6-cloud-credentials
-          key: api-token
-    - name: k6-stack-id
-      valueFrom:
-        secretKeyRef:
-          name: k6-cloud-credentials
-          key: stack-id
-  metrics:
-    - name: k6-thresholds
-      interval: 60s
-      successCondition: "result == true"
-      failureLimit: 0
-      provider:
-        plugin:
-          argo-rollouts-k6-plugin/metric:
-            testRunId: "{{ args.test-run-id }}"
-            apiToken: "{{ args.k6-api-token }}"
-            stackId: "{{ args.k6-stack-id }}"
-            metric: thresholds
+  name: argo-rollouts-k6-plugin
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
 ```
 
-### TS-4: Secrets Management via Kubernetes Secrets
+**Confidence:** HIGH -- batch/v1 Job API is stable, client-go pattern proven by Gateway API plugin, exit code propagation is standard Kubernetes behavior.
+
+### TS-3: Provider Selection in Plugin Config
 
 | Aspect | Detail |
 |---------|--------|
-| **Why Expected** | Every Argo Rollouts plugin that connects to an external service handles credentials through `secretKeyRef` in AnalysisTemplate args (Datadog, NewRelic, Prometheus with auth). Hardcoding tokens in YAML is a non-starter for any production user. |
+| **Why Expected** | With multiple providers (grafana-cloud, kubernetes-job, k6-operator), users need an explicit way to select which execution backend to use. The existing `PluginConfig` has no `provider` field because v1.0 only had one provider. |
 | **Complexity** | Low |
-| **Notes** | Follow Datadog's pattern: support both inline `secretKeyRef` in template args AND a dedicated Secret in the argo-rollouts namespace for cluster-wide defaults. The Grafana Cloud k6 API requires `Authorization: Bearer <token>` and `X-Stack-Id: <id>` headers. |
+| **Dependencies** | Existing `Provider` interface. |
+| **Notes** | Add a `provider` field to `PluginConfig`. Default to `grafana-cloud` for backward compatibility. New values: `kubernetes-job`, `k6-operator`. |
 
-**Secret YAML:**
+**Config field:**
 
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: k6-cloud-credentials
-  namespace: argo-rollouts
-type: Opaque
-stringData:
-  api-token: "your-k6-api-token-here"
-  stack-id: "12345"
+```json
+{
+  "provider": "kubernetes-job",
+  "script": {
+    "configMap": {
+      "name": "k6-load-test",
+      "key": "script.js"
+    }
+  }
+}
 ```
 
-### TS-5: HTTP Latency Percentile Metrics (p95, p99)
+**Provider resolution logic:**
+1. If `provider` is empty and `testId` + `apiToken` + `stackId` are set: use `grafana-cloud` (backward compat)
+2. If `provider` is `"kubernetes-job"`: use KubernetesJobProvider
+3. If `provider` is `"k6-operator"`: use K6OperatorProvider
+4. If `provider` is explicitly `"grafana-cloud"`: use GrafanaCloudProvider
+
+**Confidence:** HIGH -- simple config routing, no external dependencies.
+
+### TS-4: RBAC Documentation and Example ClusterRole
 
 | Aspect | Detail |
 |---------|--------|
-| **Why Expected** | Latency percentiles are the second most common deployment gate after error rate. Every monitoring-based plugin exposes this. k6 natively tracks `http_req_duration` as a Trend metric with percentile support. Users expect to gate deployments on "p95 latency < 500ms". |
-| **Complexity** | Low-Medium |
-| **Notes** | Query k6 Cloud metrics API (`/cloud/v5/test_runs/{id}/query_aggregate_k6`) with `histogram_quantile` for p50, p90, p95, p99. Return as numeric value for `successCondition` evaluation. |
-
-**AnalysisTemplate YAML:**
-
-```yaml
-metrics:
-  - name: p95-latency
-    interval: 30s
-    successCondition: "result < 500"
-    failureCondition: "result >= 2000"
-    failureLimit: 3
-    provider:
-      plugin:
-        argo-rollouts-k6-plugin/metric:
-          testRunId: "{{ args.test-run-id }}"
-          apiToken: "{{ args.k6-api-token }}"
-          stackId: "{{ args.k6-stack-id }}"
-          metric: http_req_duration
-          aggregation: p95
-```
-
-### TS-6: HTTP Error Rate Metric
-
-| Aspect | Detail |
-|---------|--------|
-| **Why Expected** | Error rate is THE canonical deployment gate. If new code causes errors above threshold, roll back. k6's `http_req_failed` Rate metric tracks this natively. |
+| **Why Expected** | In-cluster providers require additional RBAC permissions on the controller service account. Without clear documentation and example YAML, users will get cryptic "forbidden" errors and blame the plugin. Every operator/plugin that creates K8s resources ships RBAC examples. |
 | **Complexity** | Low |
-| **Notes** | Query `http_req_failed` metric from k6 Cloud API. Return as float (0.0 to 1.0). Direct use in `successCondition: "result < 0.01"`. |
+| **Dependencies** | TS-2 (Job provider), TS-6 (k6-operator provider). |
+| **Notes** | Ship as `examples/rbac/` directory with separate ClusterRole files per provider. |
 
-### TS-7: HTTP Throughput Metric (requests/sec)
+**Confidence:** HIGH -- documentation task.
 
-| Aspect | Detail |
-|---------|--------|
-| **Why Expected** | Throughput regression (fewer req/s than expected) can indicate performance degradation even when error rate and latency look fine. k6's `http_reqs` Counter metric tracks this. |
-| **Complexity** | Low |
-| **Notes** | Query `http_reqs` metric with rate aggregation from k6 Cloud API. |
-
-### TS-8: Configurable Plugin Registration via ConfigMap
-
-| Aspect | Detail |
-|---------|--------|
-| **Why Expected** | Standard Argo Rollouts plugin installation pattern. Every plugin must register in `argo-rollouts-config` ConfigMap with name, location (URL or file://), and optional SHA256 checksum. Without following this convention, the plugin won't load. |
-| **Complexity** | Low (convention compliance, not custom code) |
-| **Notes** | Must publish static binary to GitHub Releases with checksum file. |
-
-**ConfigMap YAML:**
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: argo-rollouts-config
-  namespace: argo-rollouts
-data:
-  metricProviderPlugins: |-
-    - name: "argo-rollouts-k6-plugin/metric"
-      location: "https://github.com/<org>/argo-rollouts-k6-plugin/releases/download/v0.1.0/metric-plugin-linux-amd64"
-      sha256: "<checksum>"
-  stepPlugins: |-
-    - name: "argo-rollouts-k6-plugin/step"
-      location: "https://github.com/<org>/argo-rollouts-k6-plugin/releases/download/v0.1.0/step-plugin-linux-amd64"
-      sha256: "<checksum>"
-```
-
-### TS-9: Example AnalysisTemplates for Common Use Cases
-
-| Aspect | Detail |
-|---------|--------|
-| **Why Expected** | Every successful Argo Rollouts plugin ships with ready-to-use examples. The Prometheus sample plugin, Datadog docs, and NewRelic docs all lead with YAML examples. Users copy-paste-modify, they don't read interface specs. |
-| **Complexity** | Low |
-| **Notes** | Ship examples for: (1) simple threshold gate, (2) error rate + latency combined, (3) step plugin fire-and-wait, (4) combined step + metric workflow. |
 
 ## Differentiators
 
-Features that set this plugin apart. Not expected, but valued.
+Features that set the in-cluster execution apart from alternatives.
 
-### D-1: Combined Step + Metric Workflow (Trigger then Monitor)
+### D-1: k6-operator CRD Provider (TestRun CR)
 
 | Aspect | Detail |
 |---------|--------|
-| **Value Proposition** | No existing Argo Rollouts plugin combines test execution AND metric monitoring in one coherent workflow. The step plugin triggers a k6 test, and the metric plugin can monitor that same test run's metrics as a separate analysis. This "trigger then gate" pattern is unique to load testing and doesn't exist for Datadog/Prometheus (which are passive observers). |
-| **Complexity** | Medium |
-| **Notes** | The step plugin returns the `testRunId` in its status. The metric plugin accepts `testRunId` as an arg. Users wire them together via AnalysisTemplate args. This is the killer workflow. |
+| **Value Proposition** | For teams already running k6-operator (v1.0+, released Sep 2025), creating `TestRun` CRs is the native distributed execution path. The k6-operator handles parallelism (automatic execution segment splitting), runner pod lifecycle, initializer validation, and cleanup. This plugin becomes a bridge: Argo Rollouts triggers k6-operator tests and gates rollouts on results. |
+| **Complexity** | High |
+| **Dependencies** | TS-1 (ConfigMap script sourcing), k6-operator CRD installed in cluster, k6-operator Go types (`github.com/grafana/k6-operator/api/v1alpha1`). |
+| **Notes** | k6-operator v1.3.2 (Apr 2026). Go module uses k8s.io/client-go v0.34.1 -- matches our go.mod exactly. Uses `k6.io/v1alpha1` API group. |
 
-**Combined Rollout YAML:**
+**TestRun CR lifecycle stages:** `initialization` -> `initialized` -> `created` -> `started` -> `stopped`/`finished`/`error`
+
+**Critical limitation -- issue #577:** k6-operator does NOT currently propagate k6 threshold pass/fail to the TestRun status conditions. The TestRun `.status.stage` shows `finished` for both passing and failing tests. There is no `status.result` or `status.conditions[type=TestResult]` field.
+
+**Result extraction workarounds:**
+1. **Pod exit code inspection (recommended):** After TestRun reaches `finished` stage, inspect runner Job pods. k6 exits with code 99 on threshold failure. Plugin reads pod exit codes via `clientset.CoreV1().Pods(ns).List()` with label selector for the TestRun's runner pods
+2. **Log parsing:** Parse runner pod logs for handleSummary JSON output (same pattern as Job provider)
+3. **Cloud output fallback:** If user configures `k6 run --out cloud`, results are available via Grafana Cloud API (hybrid mode)
+
+**Plugin creates TestRun CR:**
 
 ```yaml
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: k6-<rollout>-<hash>
+  namespace: <target-namespace>
+  labels:
+    app.kubernetes.io/managed-by: argo-rollouts-k6-plugin
 spec:
-  strategy:
-    canary:
-      steps:
-        - setWeight: 20
-        # Step 1: trigger the load test
-        - plugin:
-            name: argo-rollouts-k6-plugin/step
-            config:
-              testId: "12345"
-              apiToken:
-                secretRef:
-                  name: k6-cloud-credentials
-                  key: api-token
-              stackId:
-                secretRef:
-                  name: k6-cloud-credentials
-                  key: stack-id
-        # Step 2: gate on the test results
-        - analysis:
-            templates:
-              - templateName: k6-thresholds-gate
-            args:
-              - name: test-run-id
-                value: "{{steps.plugin.status.testRunId}}"
-        - setWeight: 80
+  parallelism: 4              # from plugin config
+  script:
+    configMap:
+      name: k6-load-test
+      file: script.js
+  runner:
+    env:
+      - name: K6_TARGET_URL
+        value: "http://canary-svc:8080"
+  cleanup: "post"             # auto-delete TestRun after completion
 ```
 
-### D-2: Provider Abstraction Interface
-
-| Aspect | Detail |
-|---------|--------|
-| **Value Proposition** | Design the internal architecture so that Grafana Cloud k6 is one "provider" behind a Go interface. Future providers (in-cluster k6-operator Jobs, local k6 binary) plug in without changing the plugin's external API. This future-proofs the plugin and signals to the community that it's a serious, extensible project. |
-| **Complexity** | Medium |
-| **Notes** | Define `TestProvider` interface with methods like `TriggerTest`, `GetTestStatus`, `GetMetrics`, `GetThresholds`, `StopTest`. Implement `GrafanaCloudProvider` first. |
-
-### D-3: Structured Multi-Metric Result Object
-
-| Aspect | Detail |
-|---------|--------|
-| **Value Proposition** | Instead of returning a single scalar value per metric query (like Prometheus), return a structured object with multiple fields. This lets users write richer `successCondition` expressions like `result.p95 < 500 && result.errorRate < 0.01` in a SINGLE metric definition. Reduces AnalysisTemplate boilerplate. |
-| **Complexity** | Medium |
-| **Notes** | Argo Rollouts' expression engine supports map access. Return `map[string]interface{}` from the metric plugin. Fields: `httpReqDuration.p50`, `httpReqDuration.p95`, `httpReqDuration.p99`, `httpReqFailedRate`, `httpReqs`, `thresholdsPassed`, `thresholdsTotal`, `thresholdsFailed`. |
-
-**AnalysisTemplate YAML:**
+**Plugin config:**
 
 ```yaml
-metrics:
-  - name: k6-comprehensive
-    interval: 30s
-    successCondition: >
-      result.httpReqDuration.p95 < 500 &&
-      result.httpReqFailedRate < 0.01 &&
-      result.thresholdsPassed == true
-    failureLimit: 3
-    provider:
-      plugin:
-        argo-rollouts-k6-plugin/metric:
-          testRunId: "{{ args.test-run-id }}"
-          apiToken: "{{ args.k6-api-token }}"
-          stackId: "{{ args.k6-stack-id }}"
-          metric: summary
+config:
+  provider: k6-operator
+  script:
+    configMap:
+      name: k6-load-test
+      key: script.js
+  parallelism: 4
+  namespace: load-testing
+  timeout: 15m
+  runner:
+    image: grafana/k6:latest
+    env:
+      - name: K6_TARGET_URL
+        value: "http://{{ args.canary-service }}:8080"
 ```
 
-### D-4: Test Run Status Metadata in GetMetadata
+**Additional RBAC for k6-operator provider:**
+
+```yaml
+rules:
+  - apiGroups: ["k6.io"]
+    resources: ["testruns"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]   # for exit code inspection
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]   # for result extraction
+```
+
+**Confidence:** MEDIUM -- k6-operator types and lifecycle are well-documented, but the threshold result propagation gap (issue #577) means result extraction requires workaround via pod exit codes. This workaround is reliable but adds complexity.
+
+### D-2: Configurable k6 Image and Arguments
 
 | Aspect | Detail |
 |---------|--------|
-| **Value Proposition** | The `GetMetadata` method on the metric interface lets plugins return extra key-value pairs stored alongside measurements. Use this to surface k6 Cloud URLs, test run status, VU counts, and threshold details in the AnalysisRun status. Makes debugging failed rollouts much easier -- users can click through to the k6 Cloud dashboard. |
+| **Value Proposition** | Teams use custom k6 images with extensions (xk6-built binaries for Kafka, SQL, Redis, etc.). Allowing image override and extra k6 CLI arguments makes the plugin work with any k6 variant. |
 | **Complexity** | Low |
-| **Notes** | Return metadata like `k6CloudUrl`, `testRunStatus`, `vuCount`, `duration`. Visible in `kubectl get analysisrun -o yaml`. |
+| **Dependencies** | TS-2 (Job provider) or D-1 (k6-operator provider). |
+| **Notes** | Default image: `grafana/k6:latest`. Allow override in plugin config. Also expose `arguments` field for passing `--tag`, `--env`, `--out`, etc. |
 
-### D-5: Automatic Test Run ID Resolution
+**Config fields:**
 
-| Aspect | Detail |
-|---------|--------|
-| **Value Proposition** | Instead of requiring users to manually pass `testRunId`, the metric plugin can accept a `testId` (the load test definition ID) and automatically find the latest running or most recent completed test run. This eliminates the need for manual wiring between step and metric plugins in simple use cases. |
-| **Complexity** | Medium |
-| **Notes** | Query `/loadtests/v2/tests/{id}` to get `test_run_ids`, pick the latest. Configurable: `latestRun: true` or `testRunId: explicit`. |
-
-**AnalysisTemplate YAML (simplified):**
-
-```yaml
-metrics:
-  - name: k6-gate
-    interval: 30s
-    successCondition: "result.thresholdsPassed == true"
-    provider:
-      plugin:
-        argo-rollouts-k6-plugin/metric:
-          testId: "12345"
-          latestRun: true
-          apiToken: "{{ args.k6-api-token }}"
-          stackId: "{{ args.k6-stack-id }}"
-          metric: thresholds
+```json
+{
+  "provider": "kubernetes-job",
+  "runner": {
+    "image": "my-registry/custom-k6:v0.52.0",
+    "env": [
+      {"name": "K6_TARGET_URL", "value": "http://canary:8080"}
+    ]
+  },
+  "arguments": "--tag testid=canary-v2 --no-color"
+}
 ```
 
-### D-6: Graceful Termination with Test Stop
+**Confidence:** HIGH -- standard pattern, no external dependencies.
+
+### D-3: Namespace Targeting
 
 | Aspect | Detail |
 |---------|--------|
-| **Value Proposition** | When a rollout is aborted or terminated, the step plugin's `Terminate`/`Abort` methods should stop the running k6 Cloud test. Prevents orphaned test runs from consuming cloud credits and generating misleading results. No other community plugin handles this level of cleanup for external resources. |
-| **Complexity** | Low-Medium |
-| **Notes** | Call k6 Cloud API to stop the test run on `Terminate` and `Abort`. Store `testRunId` in step status for retrieval. |
+| **Value Proposition** | Run k6 Jobs/TestRuns in a dedicated namespace (e.g., `load-testing`) separate from the rollout namespace. Enables resource quotas, network policies, and RBAC isolation for load testing workloads. |
+| **Complexity** | Low |
+| **Dependencies** | TS-2 or D-1. RBAC must cover the target namespace. |
+| **Notes** | Default: same namespace as the Rollout. Override via `namespace` field. |
 
-### D-7: Custom k6 Metric Support
+**Confidence:** HIGH -- simple config, standard K8s pattern.
+
+### D-4: Automatic Job Naming and Labeling
 
 | Aspect | Detail |
 |---------|--------|
-| **Value Proposition** | k6 supports custom metrics (Counter, Gauge, Rate, Trend) defined in test scripts. Power users define business-specific metrics like `successful_logins` or `checkout_conversion_rate`. Exposing arbitrary custom metrics via the plugin config makes this useful beyond HTTP-level testing. |
-| **Complexity** | Medium |
-| **Notes** | Accept `metric: custom` with `metricName: my_custom_metric` and `aggregation: p95|rate|count|value`. Query k6 Cloud API with the custom metric name. |
+| **Value Proposition** | Generated Job/TestRun names include rollout name and a hash for uniqueness. Labels link back to the rollout for observability (`kubectl get jobs -l argo-rollouts.argoproj.io/rollout=my-app`). Annotations store the AnalysisRun or step context for debugging. |
+| **Complexity** | Low |
+| **Dependencies** | TS-2 or D-1. |
+| **Notes** | Name format: `k6-<rollout>-<8-char-hash>`. Truncate to 63 chars (K8s name limit). |
 
-**AnalysisTemplate YAML:**
+**Confidence:** HIGH.
 
-```yaml
-metrics:
-  - name: checkout-conversion
-    interval: 30s
-    successCondition: "result > 0.95"
-    provider:
-      plugin:
-        argo-rollouts-k6-plugin/metric:
-          testRunId: "{{ args.test-run-id }}"
-          apiToken: "{{ args.k6-api-token }}"
-          stackId: "{{ args.k6-stack-id }}"
-          metric: custom
-          metricName: checkout_success_rate
-          aggregation: rate
-```
+### D-5: Resource Requests/Limits for k6 Pods
+
+| Aspect | Detail |
+|---------|--------|
+| **Value Proposition** | Let users specify CPU/memory requests and limits for k6 runner pods. Prevents load test pods from starving production workloads or getting OOMKilled during high-VU tests. |
+| **Complexity** | Low |
+| **Dependencies** | TS-2 or D-1. |
+| **Notes** | Expose `runner.resources` in plugin config, map directly to container resource requirements. |
+
+**Confidence:** HIGH.
+
 
 ## Anti-Features
 
-Features to explicitly NOT build in v1.
+Features to explicitly NOT build in v0.3.0.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| **In-cluster k6 Job execution** | Significant Kubernetes RBAC complexity (creating Jobs, watching Pods, log collection). Grafana Cloud k6 covers the initial use case. Build the provider interface (D-2) so this can be added later without breaking changes. | Defer to v2. Ship provider interface abstraction now. |
-| **ConfigMap-based k6 script upload** | Grafana Cloud k6 tests are identified by test ID. Uploading scripts requires managing script content, dependencies, and versioning -- a different problem domain. The k6 Cloud UI already handles this well. | Defer to v2. Accept `testId` only in v1. |
-| **k6 binary execution mode** | Running k6 as a subprocess inside the rollout controller is fragile, resource-intensive, and creates security concerns. The plugin runs as a child process of the controller -- it shouldn't spawn its own children. | Defer to v2+. Use k6 Cloud or k6-operator instead. |
-| **VUs/duration override in step plugin** | Tempting to let users override VU count or test duration at trigger time, but this creates divergence between what's defined in k6 Cloud and what runs. Leads to "works locally, fails in CI" confusion. | Accept the test configuration as defined in k6 Cloud. If users need overrides, they should update the test definition. |
-| **Grafana dashboard generation** | Out of scope -- separate concern. Dashboards require Grafana API access, templates, and maintenance. Many users already have their own dashboard setup. | Document how to link to k6 Cloud test results URL from AnalysisRun metadata (D-4). |
-| **Test script sourcing from URL/git** | Network reliability concerns, git auth complexity, no caching story. These are v3+ concerns. | Defer. Use `testId` referencing existing k6 Cloud tests. |
-| **Multi-provider in single binary** | Shipping both metric and step plugin as one binary adds complexity to the build, registration, and upgrade story. | Ship as two separate binaries with a shared Go module for common code (API client, types, provider interface). |
-| **Real-time streaming metrics** | k6 Cloud evaluates thresholds every 60 seconds. Polling more frequently than that returns stale data and wastes API calls. Don't build a streaming/websocket integration. | Use polling with sensible intervals (30s-60s). Document recommended `interval` values. |
-| **Helm chart or operator** | Distribution complexity. Argo Rollouts plugins are binaries registered via ConfigMap -- no operator needed. A Helm chart adds a maintenance burden without clear value for a plugin. | Provide clear ConfigMap YAML examples and a one-liner install guide. |
+| **Local binary execution (subprocess)** | Running k6 as a subprocess of the plugin process is fragile: (1) k6 binary must be present in the controller container, bloating the image; (2) subprocess stdout format changes when not connected to a terminal (structured log vs plain text -- see grafana/k6#3744); (3) resource consumption is unbounded in the controller pod; (4) no isolation from controller process; (5) crash in k6 subprocess can destabilize the plugin RPC connection. The k6-operator and Job provider cover all in-cluster use cases without these risks. | Ship Job provider (TS-2) for simple execution, k6-operator provider (D-1) for distributed execution. Document in v0.3.0 release notes that local binary execution was evaluated and rejected. |
+| **PersistentVolume script sourcing** | ConfigMaps cover 95%+ of k6 scripts (< 1 MiB). PVC support adds complexity: provisioning, storage class selection, access modes (ReadWriteOnce vs ReadWriteMany), lifecycle management. Users who need PVC can use k6-operator directly (it supports `spec.script.volumeClaim`). | Support ConfigMap only. Document the 1 MiB limit and recommend k6-operator for larger test suites. |
+| **Inline script in plugin config** | Embedding k6 JavaScript directly in the Rollout YAML or AnalysisTemplate is tempting but terrible: no syntax highlighting, no version control for the script, YAML escaping nightmares, size limits on the Rollout object. | Require scripts in ConfigMaps. Users manage scripts via their GitOps workflow. |
+| **Multi-file k6 module imports** | k6 scripts can `import` from other files. Supporting multi-file imports via multiple ConfigMap keys adds significant complexity (directory reconstruction, mount path management). The k6-operator handles this via PVC; for single-file ConfigMap mode, imports are not supported. | Single-file scripts only for ConfigMap mode. Document that users needing imports should use k6-operator with PVC or bundle their modules into a single file. |
+| **Automatic k6-operator installation** | The plugin should not install or manage the k6-operator CRDs or controller. That's the user's responsibility. | Document k6-operator as a prerequisite. Fail gracefully with a clear error if CRDs are not installed. |
+| **Real-time metric streaming from in-cluster k6** | k6 in-cluster can output to Prometheus remote write or InfluxDB, but building a streaming metrics pipeline from Job pods to the metric plugin adds massive complexity for marginal benefit. | Use end-of-test summary (exit code + handleSummary JSON) for result extraction. For real-time metrics during a run, users can configure k6 --out prometheus and use the existing Prometheus metric provider in Argo Rollouts. |
+| **VU/duration override in plugin config** | Same rationale as v1.0: creates divergence between script definition and runtime behavior. | Accept test configuration as defined in the k6 script. |
+| **Distributed execution without k6-operator** | Running multiple k6 Job pods with execution segments is exactly what k6-operator does. Reimplementing it in this plugin is wasteful. | Use k6-operator provider for distributed execution. Use Job provider for single-pod execution only. |
 
 ## Feature Dependencies
 
 ```
-TS-4 (Secrets) --> TS-1 (Metric Plugin)    [metrics need auth]
-TS-4 (Secrets) --> TS-2 (Step Plugin)      [step needs auth]
-TS-1 (Metric Plugin) --> TS-3 (Thresholds) [thresholds are a metric type]
-TS-1 (Metric Plugin) --> TS-5 (Latency)    [latency is a metric type]
-TS-1 (Metric Plugin) --> TS-6 (Error Rate) [error rate is a metric type]
-TS-1 (Metric Plugin) --> TS-7 (Throughput) [throughput is a metric type]
-TS-8 (ConfigMap Reg) --> TS-1, TS-2        [plugins must register to load]
-TS-1 + TS-2 --> D-1 (Combined Workflow)    [needs both plugins working]
-TS-1 --> D-3 (Structured Results)          [enhancement to metric return]
-TS-1 --> D-4 (Metadata)                    [enhancement to metric metadata]
-TS-1 --> D-5 (Auto Test Run ID)            [enhancement to metric config]
-TS-2 --> D-6 (Graceful Termination)        [enhancement to step lifecycle]
-TS-1 --> D-7 (Custom Metrics)              [enhancement to metric queries]
-D-2 (Provider Interface) is architectural  [no runtime dependency, but design dependency on all features]
+TS-3 (Provider Selection) --> TS-2 (Job Provider)     [Job needs provider routing]
+TS-3 (Provider Selection) --> D-1 (k6-operator)       [Operator needs provider routing]
+TS-1 (ConfigMap Scripts)  --> TS-2 (Job Provider)      [Job mounts ConfigMap]
+TS-1 (ConfigMap Scripts)  --> D-1 (k6-operator)        [TestRun references ConfigMap]
+TS-2 (Job Provider)       --> D-2 (Custom Image)       [Image is a Job spec field]
+TS-2 (Job Provider)       --> D-3 (Namespace)          [Namespace is Job metadata]
+TS-2 (Job Provider)       --> D-4 (Naming/Labels)      [Labels are Job metadata]
+TS-2 (Job Provider)       --> D-5 (Resources)          [Resources are container spec]
+D-1 (k6-operator)         --> D-2 (Custom Image)       [Image is TestRun runner spec]
+D-1 (k6-operator)         --> D-3 (Namespace)          [Namespace is TestRun metadata]
+D-1 (k6-operator)         --> D-4 (Naming/Labels)      [Labels are TestRun metadata]
+D-1 (k6-operator)         --> D-5 (Resources)          [Resources are runner pod spec]
+TS-4 (RBAC Docs)          --> TS-2, D-1                [Docs cover both providers]
+
+Existing features required:
+  Provider interface (internal/provider/provider.go) --> all new providers
+  Step plugin (internal/step/step.go) --> all providers via Run/Terminate/Abort
+  Metric plugin (internal/metric/metric.go) --> result extraction from in-cluster runs
 ```
 
 ## MVP Recommendation
 
-### Phase 1: Core Plugin Infrastructure
+### Phase 1: Foundation -- ConfigMap + Job Provider
 
 Prioritize:
-1. **TS-8** (ConfigMap registration) + **D-2** (Provider interface) -- foundational architecture
-2. **TS-4** (Secrets management) -- required by everything else
-3. **TS-2** (Step plugin: trigger and wait) -- simplest end-to-end value
-4. **TS-3** (Threshold pass/fail metric) -- simplest metric, highest value
+1. **TS-3** (Provider selection) -- config routing, backward compat
+2. **TS-1** (ConfigMap script sourcing) -- K8s client init in InitPlugin, ConfigMap read
+3. **TS-2** (Kubernetes Job provider) -- create Job, poll status, extract exit code
+4. **D-4** (Naming/Labels) -- needed for Job identification during polling
+5. **TS-4** (RBAC docs) -- unblock users immediately
 
-This gives users the most common workflow: "trigger a k6 Cloud test at canary step 20%, wait for it to finish, gate on threshold pass/fail."
+This gives users: "reference a k6 script from ConfigMap, run it as a K8s Job, gate rollout on pass/fail."
 
-### Phase 2: Rich Metrics
+### Phase 2: k6-operator Provider
 
-5. **TS-1** (Full metric plugin with configurable metrics)
-6. **TS-5** (p95/p99 latency)
-7. **TS-6** (Error rate)
-8. **TS-7** (Throughput)
-9. **TS-9** (Example templates)
-10. **D-3** (Structured multi-metric results)
+6. **D-1** (k6-operator CRD provider) -- create TestRun CR, poll stage, extract results via pod exit codes
+7. **D-2** (Custom image) -- needed by both providers, natural extension
+8. **D-3** (Namespace targeting) -- needed by both providers
+9. **D-5** (Resource limits) -- production readiness
 
-### Phase 3: Polish and Differentiation
+This adds: "distributed k6 execution via k6-operator with automatic parallelism."
 
-11. **D-1** (Combined step + metric workflow)
-12. **D-4** (Metadata with k6 Cloud URLs)
-13. **D-5** (Automatic test run ID resolution)
-14. **D-6** (Graceful termination)
-15. **D-7** (Custom metric support)
+### Phase 3: Polish
+
+10. Enhanced metric extraction from pod logs (handleSummary JSON parsing)
+11. Example AnalysisTemplates and Rollouts for in-cluster providers
+12. Integration tests for both providers on kind cluster
 
 ### Rationale
 
-- Step plugin first because it's self-contained (trigger, poll, return pass/fail) and demonstrates value with zero AnalysisTemplate complexity
-- Threshold metric second because it reuses existing k6 script thresholds rather than forcing users to redefine criteria in YAML
-- Rich metrics third because they add flexibility but require users to understand `successCondition` expressions
-- Differentiators last because they polish the experience but aren't blockers for adoption
+- Job provider first because it has zero external dependencies (no k6-operator CRDs needed), covers single-node execution, and validates the entire ConfigMap + K8s client pipeline
+- k6-operator second because it requires the k6-operator to be pre-installed, adds the CRD type dependency, and needs the exit-code workaround for result extraction
+- Polish last because it improves DX but doesn't block core functionality
+- Local binary execution explicitly rejected as an anti-feature based on research findings
 
-Defer: VUs override, ConfigMap scripts, in-cluster execution, Helm chart -- all explicitly out of scope for v1 per PROJECT.md.
+### Deferred to v0.4.0+
+
+- Custom k6 metric support (user-defined Counter/Gauge/Rate/Trend) -- requires handleSummary JSON parsing infrastructure
+- PersistentVolume script sourcing -- only needed for scripts > 1 MiB
+- Multi-file k6 module imports
 
 ## Sources
 
-- [Argo Rollouts Plugin System](https://argo-rollouts.readthedocs.io/en/stable/plugins/)
-- [Argo Rollouts Analysis & Progressive Delivery](https://argoproj.github.io/argo-rollouts/features/analysis/)
-- [Argo Rollouts Canary Step Plugin](https://argoproj.github.io/argo-rollouts/features/canary/plugins/)
-- [Argo Rollouts Plugin Types Go Package](https://pkg.go.dev/github.com/argoproj/argo-rollouts/utils/plugin/types)
-- [Prometheus Sample Metric Plugin](https://github.com/argoproj-labs/rollouts-plugin-metric-sample-prometheus)
-- [OpenSearch Metric Plugin](https://github.com/argoproj-labs/rollouts-plugin-metric-opensearch)
-- [Datadog Analysis Template Docs](https://argo-rollouts.readthedocs.io/en/stable/analysis/datadog/)
-- [NewRelic Analysis Template Docs](https://argo-rollouts.readthedocs.io/en/stable/analysis/newrelic/)
-- [Grafana Cloud k6 REST API](https://grafana.com/docs/grafana-cloud/testing/k6/reference/cloud-rest-api/)
-- [Grafana Cloud k6 Metrics API](https://grafana.com/docs/grafana-cloud/testing/k6/reference/cloud-rest-api/metrics/)
-- [Grafana Cloud k6 Test Runs API](https://grafana.com/docs/grafana-cloud/testing/k6/reference/cloud-rest-api/test-runs/)
-- [Grafana Cloud k6 Authentication](https://grafana.com/docs/grafana-cloud/testing/k6/author-run/tokens-and-cli-authentication/)
-- [k6 Thresholds Documentation](https://grafana.com/docs/k6/latest/using-k6/thresholds/)
-- [k6 Metrics Documentation](https://grafana.com/docs/k6/latest/using-k6/metrics/)
-- [k6 Cloud Test Status Codes](https://grafana.com/docs/grafana-cloud/testing/k6/reference/cloud-test-status-codes/)
+- [Argo Rollouts Plugin Docs](https://argo-rollouts.readthedocs.io/en/stable/plugins/) -- HIGH confidence
+- [Gateway API Traffic Router Plugin (InitPlugin with K8s client)](https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/blob/main/pkg/plugin/plugin.go) -- HIGH confidence (verified source code)
+- [k6-operator v1alpha1 Go Types](https://pkg.go.dev/github.com/grafana/k6-operator/api/v1alpha1) -- HIGH confidence
+- [k6-operator TestRun CRD Configuration](https://grafana.com/docs/k6/latest/set-up/set-up-distributed-k6/usage/configure-testrun-crd/) -- HIGH confidence
+- [k6-operator TestRun Execution with CRD](https://grafana.com/docs/k6/latest/set-up/set-up-distributed-k6/usage/executing-k6-scripts-with-testrun-crd/) -- HIGH confidence
+- [k6-operator Issue #577: TestRun failure not in conditions](https://github.com/grafana/k6-operator/issues/577) -- HIGH confidence (open issue, confirms gap)
+- [k6-operator Issue #75: Handle k6 exit codes](https://github.com/grafana/k6-operator/issues/75) -- HIGH confidence (open issue, unresolved)
+- [k6 Exit Codes: 0=pass, 99=threshold failure](https://pkg.go.dev/go.k6.io/k6/errext/exitcodes) -- HIGH confidence
+- [k6 handleSummary() Custom Summary](https://grafana.com/docs/k6/latest/results-output/end-of-test/custom-summary/) -- HIGH confidence
+- [k6 Subprocess Output Format Change (issue #3744)](https://github.com/grafana/k6/issues/3744) -- HIGH confidence (confirms subprocess parsing risk)
+- [k6 Docker Image (grafana/k6)](https://hub.docker.com/r/grafana/k6) -- HIGH confidence
+- [Kubernetes ConfigMap Size Limit (1 MiB)](https://kubernetes.io/docs/concepts/configuration/configmap/) -- HIGH confidence
+- [Kubernetes Job API (batch/v1)](https://kubernetes.io/docs/concepts/workloads/controllers/job/) -- HIGH confidence
+- [k6-operator Releases (v1.3.2, Apr 2026)](https://github.com/grafana/k6-operator/releases) -- HIGH confidence
+- [k6 Machine-Readable Summary Schema](https://github.com/grafana/k6-summary) -- MEDIUM confidence (WIP repo)
+- [k6-operator Test Execution Flow (DeepWiki)](https://deepwiki.com/grafana/k6-operator/2.3-test-execution-flow) -- MEDIUM confidence
