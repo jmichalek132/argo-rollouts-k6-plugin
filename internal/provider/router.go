@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 )
 
 // Compile-time interface check.
@@ -52,7 +53,12 @@ func (r *Router) resolve(cfg *PluginConfig) (Provider, error) {
 	}
 	p, ok := r.providers[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown provider %q (registered: grafana-cloud, k6-operator)", name)
+		registered := make([]string, 0, len(r.providers))
+		for k := range r.providers {
+			registered = append(registered, k)
+		}
+		sort.Strings(registered)
+		return nil, fmt.Errorf("unknown provider %q (registered: %v)", name, registered)
 	}
 	return p, nil
 }
