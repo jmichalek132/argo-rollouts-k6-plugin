@@ -53,7 +53,10 @@ Full details: [milestones/v0.2.0-ROADMAP.md](milestones/v0.2.0-ROADMAP.md)
   1. Plugin config with `provider: "k6-operator"` routes to the k6-operator backend; omitting `provider` or setting `provider: "grafana-cloud"` routes to the existing Grafana Cloud backend (backward compatible)
   2. Plugin creates a working Kubernetes client from in-cluster service account credentials during InitPlugin
   3. Plugin reads a k6 .js script body from a ConfigMap by name and key, and that script content is available to downstream providers
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 07-01-PLAN.md -- Config extension, Router multiplexer, k8s dependency promotion
+- [ ] 07-02-PLAN.md -- K6OperatorProvider with lazy k8s client and ConfigMap reading, main.go wiring
 
 ### Phase 8: k6-operator Provider
 **Goal**: Plugin creates and manages k6-operator TestRun CRs for distributed in-cluster k6 execution
@@ -99,7 +102,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10
 | 4. Release & Examples | v1.0 | 3/3 | Complete | 2026-04-10 |
 | 5. CI Pipeline Fix | v0.2.0 | 1/1 | Complete | 2026-04-15 |
 | 6. Automated Dependency Management | v0.2.0 | 1/1 | Complete | 2026-04-15 |
-| 7. Foundation & Kubernetes Client | v0.3.0 | 0/0 | Not started | - |
+| 7. Foundation & Kubernetes Client | v0.3.0 | 0/2 | Not started | - |
 | 8. k6-operator Provider | v0.3.0 | 0/0 | Not started | - |
 | 9. Metric Integration | v0.3.0 | 0/0 | Not started | - |
 | 10. Documentation & E2E | v0.3.0 | 0/0 | Not started | - |
