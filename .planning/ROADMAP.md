@@ -56,7 +56,7 @@ Full details: [milestones/v0.2.0-ROADMAP.md](milestones/v0.2.0-ROADMAP.md)
 **Plans:** 2 plans
 Plans:
 - [x] 07-01-PLAN.md -- Config extension, Router multiplexer, per-provider parseConfig validation, k8s dependency promotion
-- [ ] 07-02-PLAN.md -- K6OperatorProvider with lazy k8s client and ConfigMap reading, main.go wiring
+- [x] 07-02-PLAN.md -- K6OperatorProvider with lazy k8s client and ConfigMap reading, main.go wiring
 
 ### Phase 8: k6-operator Provider
 **Goal**: Plugin creates and manages k6-operator TestRun CRs for distributed in-cluster k6 execution
