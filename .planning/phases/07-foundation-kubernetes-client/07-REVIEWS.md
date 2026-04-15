@@ -2,116 +2,135 @@
 phase: 7
 reviewers: [codex]
 reviewed_at: 2026-04-15T23:45:00Z
+review_pass: 2
 plans_reviewed: [07-01-PLAN.md, 07-02-PLAN.md]
+previous_review: 2026-04-15 (pass 1 — concerns led to plan revision)
 ---
 
-# Cross-AI Plan Review -- Phase 7
+# Cross-AI Plan Review — Phase 7
+
+> **Review Pass 2** — Plans were revised after pass 1 to address HIGH concerns (config validation trap, InitPlugin vs lazy init, sync.Once permanent failure, script propagation, namespace ambiguity). This pass reviews the revised plans.
 
 ## Codex Review
 
 ### Plan 07-01 Review
 
 #### Summary
-Plan 07-01 is directionally sound and appropriately scoped for the first wave: extending `PluginConfig`, introducing a thin Router, and promoting Kubernetes dependencies establishes the minimum abstraction needed for multiple backends without disrupting the existing Grafana Cloud path. The main gap is that the plan understates how provider-specific validation will interact with the current duplicated config validation in `internal/metric` and `internal/step`, and it does not fully pin down contract details like router `Name()` semantics and config compatibility behavior.
+Plan 07-01 is directionally correct and matches the chosen provider-pattern architecture: a thin router, backward-compatible defaulting to Grafana Cloud, and config extension in a single shared struct fit the current codebase well. The main weakness is that the validation design is underspecified relative to the current implementation: today validation lives in `metric.parseConfig()` and `step.parseConfig()`, while the current `provider.Provider` interface has no `Validate` method. Unless that interface change and its test fallout are handled explicitly, this plan risks introducing duplicated or inconsistent validation paths.
 
 #### Strengths
-- Keeps Wave 1 narrowly focused on routing and config shape instead of mixing backend implementation into the same change.
-- Matches the existing codebase well: both binaries currently instantiate the cloud provider directly, so a Router insertion point is clean.
+- Keeps routing thin and per-call, which fits the existing stateless provider model.
 - Preserves backward compatibility by defaulting empty `provider` to Grafana Cloud.
-- Uses functional options for registration, which fits the current provider construction style.
-- TDD scope is reasonable for the Router and likely enough to catch dispatch regressions early.
-- Dependency promotion in this wave is sensible if Wave 2 will immediately consume `client-go`.
+- Uses a single `PluginConfig`, which avoids splitting config parsing logic across binaries.
+- Exact-match provider resolution avoids ambiguous normalization behavior.
+- Router-level rejection of unknown providers is a good control point for backend selection.
+- Test coverage emphasis on dispatch/default behavior is appropriate for this layer.
 
 #### Concerns
-- **HIGH**: The plan says "per-provider validation" but does not account for the current validation already happening in `metric.parseConfig()` and `step.parseConfig()`. As written, those paths still require Grafana Cloud fields like `apiToken` and `stackId`, which would break `k6-operator` configs before routing ever happens.
-- **MEDIUM**: `PluginConfig` extension is underspecified around optionality and backward compatibility. Adding provider/operator fields is safe only if JSON tags and zero values do not alter existing behavior or tests.
-- **MEDIUM**: Router `Name()` is called out as ambiguous in research, but the plan does not resolve it. Returning a fixed router name vs resolved provider name affects logs and debugging.
-- **MEDIUM**: Unknown-provider handling is mentioned, but normalization rules are not. Case sensitivity and whitespace behavior should be explicit to avoid surprising failures.
-- **LOW**: Promoting `k8s.io/client-go` and `k8s.io/api` in Wave 1 may slightly increase churn before any code uses them; not a major issue, but it adds dependency noise if Wave 2 slips.
-- **LOW**: The threat model for this wave appears more generic than actionable. "Provider field spoofing" and "config tampering" do not materially change risk inside this plugin unless tied to specific trust boundaries.
+- **HIGH**: The plan relies on per-provider validation, but the current `provider.Provider` interface does not expose `Validate`. The plan does not list changes to `internal/provider/provider.go`, `internal/provider/providertest/mock.go`, or any other callers/mocks that would need to absorb that interface change.
+  - *Note: Revised plan addresses this by keeping Validate() outside the Provider interface on K6OperatorProvider and using IsGrafanaCloud() in parseConfig. The concern is partially resolved but validation remains split across metric.go and step.go.*
+- **MEDIUM**: Validation remains split across `internal/metric/metric.go` and `internal/step/step.go`. If both files gate validation differently, drift is likely over time.
+- **MEDIUM**: "Unknown providers pass parseConfig" means invalid config is accepted until runtime dispatch. That is survivable, but it weakens early feedback and may produce inconsistent UX between metric and step entrypoints.
+- **LOW**: Adding `k8s.io/client-go` and `k8s.io/api` as direct dependencies in this plan is slightly out of order; this plan itself does not use them yet.
+- **LOW**: `Router.Name() == "router"` is fine mechanically, but if any logging/error handling uses `Name()` without also logging the resolved backend, diagnostics get less clear.
 
 #### Suggestions
-- Refactor config validation ownership in this wave, not Wave 2. At minimum, move shared syntactic validation into a common place and reserve provider-specific required-field checks for the Router/provider layer.
-- Define Router `Name()` explicitly. Best option is usually a stable name like `"router"` for the Router itself, while provider-specific logs should use the resolved backend name.
-- Specify provider normalization rules: either exact-match only, or `strings.TrimSpace` plus lowercasing. If exact-match is intended, document that clearly.
-- Add tests for JSON backward compatibility: existing configs without `provider`, `namespace`, or `configMapRef` should unmarshal identically and keep passing.
-- Add a test that `provider: grafana-cloud` still accepts existing cloud-only configs and that `provider: k6-operator` does not require cloud credentials.
-- Consider deferring direct dependency promotion until the first actual `client-go` import if the team wants smaller review units.
+- Add the validation contract explicitly to the design:
+  - Either extend `provider.Provider` with `Validate(*PluginConfig) error`,
+  - Or define a narrow secondary interface such as `type ValidatingProvider interface { Validate(*PluginConfig) error }`.
+- Centralize provider selection + validation in one place. `metric` and `step` should ideally parse JSON once, then delegate provider-specific validation through the router instead of hard-coding provider branches in both packages.
+- Reject unknown providers during config parsing if possible, not only at dispatch time. That gives earlier, clearer failure.
+- Move the direct dependency promotion to 07-02 unless there is a tooling reason to land it earlier.
+- Add tests that cover `provider: ""`, `provider: "grafana-cloud"`, `provider: "k6-operator"`, and an unknown provider through the actual `parseConfig` entrypoints, not only the router.
 
 #### Risk Assessment
-**MEDIUM.** The routing abstraction itself is low risk, but the validation boundary is currently a real trap: if not addressed in Wave 1, the code can compile and route correctly in tests while still rejecting valid `k6-operator` configs at runtime.
+**MEDIUM**. The architecture is sound, but the interface/validation gap is real. If that contract is not nailed down up front, the result will be duplicated validation logic and brittle tests.
 
 ---
 
 ### Plan 07-02 Review
 
 #### Summary
-Plan 07-02 covers the missing functional pieces for Phase 7 and is mostly aligned with the roadmap: a stub `K6OperatorProvider`, lazy Kubernetes client creation, ConfigMap script loading, and wiring both binaries through the Router. The largest issue is a requirements mismatch: the roadmap success criterion says the plugin creates a Kubernetes client during `InitPlugin`, while the plan deliberately uses lazy initialization inside the provider on first `k6-operator` call. That may be the right design, but it needs to be reconciled explicitly. There are also a few missing edge cases around namespace resolution, error caching with `sync.Once`, and how loaded script content reaches downstream providers.
+This plan gets most of the foundation work into the right place: lazy in-cluster client ownership inside the operator provider, fake-client injection for tests, and local `readScript()` logic inside the provider all align with the stated decisions. The biggest problem is a direct mismatch with the phase requirements around namespace defaulting: the plan falls back to `"default"`, while the project decisions and success criteria say the namespace should default to the rollout namespace. That is not a minor detail; it affects correctness for real workloads.
 
 #### Strengths
-- Keeps the operator backend intentionally narrow: client init plus ConfigMap script loading, without pulling in actual k6-operator execution yet.
-- Lazy init with injectable fake client is a good fit for testability and avoids forcing Kubernetes assumptions on Grafana Cloud users.
-- ConfigMap reading inside the provider matches the locked decision and avoids premature package extraction.
-- Wiring both binaries in the same wave is correct; otherwise the feature would exist in code but remain unreachable.
-- The planned tests cover the primary unhappy paths for ConfigMap loading.
-- Preserving `K6_BASE_URL` support maintains existing test and local-dev ergonomics.
+- Keeps Kubernetes concerns isolated inside `K6OperatorProvider`, which avoids contaminating Grafana Cloud paths.
+- Lazy client creation is the right default for backward compatibility and avoids touching K8s in Grafana-only deployments.
+- `WithClient(fake)` is a practical test seam.
+- `readScript()` with explicit errors for missing ConfigMap, missing key, and empty content is a good Phase 7 boundary.
+- Wiring the router in both binaries at this stage is appropriate so backend selection is exercised end-to-end.
+- Test plan covers the important first-order cases around client init and ConfigMap reads.
 
 #### Concerns
-- **HIGH**: The plan conflicts with the stated success criterion "Plugin creates a working Kubernetes client ... during InitPlugin." The current plugin layers' `InitPlugin()` methods are no-ops, and the proposed design initializes lazily in provider calls instead. If unchanged, either the criterion or the implementation plan is wrong.
-- **HIGH**: `sync.Once` plus initialization failure needs a precise retry policy. If `ensureClient()` stores a transient failure forever, the plugin may be permanently wedged until process restart. Your research already flags this, but the plan does not state the intended behavior.
-- **MEDIUM**: The plan mentions ConfigMap reading but not how script content is represented in `PluginConfig` or otherwise passed downstream. FOUND-03 requires script content to be available to downstream providers, not merely read internally.
-- **MEDIUM**: Namespace defaulting is not fully nailed down. The roadmap says default to the rollout namespace, but the plan's tests mention "default-ns" and research mentions empty string -> `"default"`. Those are different behaviors and can lead to incorrect cross-namespace reads.
-- **MEDIUM**: `WithClient(fake)` covers test injection, but there is no mention of how `rest.InClusterConfig()` itself is abstracted for unit testing of init failure/success.
-- **MEDIUM**: ConfigMap validation scope omits script size and encoding assumptions. A 1 MiB limit may be acceptable to ignore operationally, but empty/non-empty is not the only realistic failure mode.
-- **LOW**: `nil-configmapref` behavior is listed as a test, but the plan does not say whether that means "valid when provider is grafana-cloud" or "error when provider is k6-operator." That distinction matters.
-- **LOW**: `klog` stdout contamination is called out, but the plan does not specify the mitigation. With `go-plugin`, this deserves an explicit implementation note, not just a lint target.
+- **HIGH**: Namespace fallback to `"default"` conflicts with D-09 and success criterion 3, which require defaulting to the rollout namespace. This plan does not actually achieve that requirement.
+  - *Note: Revised plan explicitly documents the fallback chain as cfg.Namespace -> "default" and defers rollout namespace injection to Phase 8. The concern is valid but may be an acceptable scope decision if the success criterion is updated.*
+- **HIGH**: The plan does not explain how rollout namespace reaches `K6OperatorProvider`. The current provider interface only accepts `context.Context` and `*PluginConfig`; no namespace-bearing runtime object is passed through. This is a dependency/design gap, not just an implementation detail.
+  - *Note: Revised plan acknowledges this and defers to Phase 8. Metric/step layers will inject namespace from AnalysisRun/Rollout ObjectMeta into cfg.Namespace before calling provider methods.*
+- **MEDIUM**: Permanent failure caching in `sync.Once` is risky. A transient failure on first operator use can wedge the process until restart.
+  - *Note: Revised plan explicitly documents this as intentional design (InClusterConfig reads local files, not network — failures are configuration errors, not transient). Includes dedicated test and block comment.*
+- **MEDIUM**: If provider `Validate()` performs existence checks via `readScript()`, config validation may now hit the Kubernetes API on every parse/dispatch path. That is acceptable for operator mode, but it should be explicit because it changes the cost and timing of validation.
+- **MEDIUM**: A stub `TriggerRun()` that always returns "not yet implemented" means successful routing to `k6-operator` still fails for real executions in this phase. That may be acceptable, but the plan should say so plainly so the phase goal is not overstated.
+- **LOW**: No mention of guarding against oversized ConfigMap payloads. A single script is usually fine, but error handling should remain clear if content is unexpectedly large.
+- **LOW**: `WithClient()` consuming `sync.Once` with a no-op is workable, but it is a slightly opaque pattern; tests should confirm it behaves predictably under repeated calls.
 
 #### Suggestions
-- Reconcile the `InitPlugin` requirement before implementation. Either:
-  1. Change the phase success criterion to "client can be created from in-cluster credentials and is initialized lazily on first `k6-operator` use," or
-  2. Extend the provider/plugin interface so `InitPlugin()` can trigger provider initialization intentionally.
-- Avoid plain `sync.Once` if retry-after-failure is desired. A mutex plus cached client/error state is often clearer when transient cluster/API startup failures should not be permanent.
-- Define exactly where the loaded script body lives after `readScript()`: for example `cfg.Script` populated before dispatch, or an operator-provider-specific internal request object. That contract should appear in the plan.
-- Clarify namespace resolution in tests and implementation:
-  - If `config.namespace` is set, use it.
-  - Else use rollout namespace.
-  - Only fall back to `"default"` if rollout namespace is unavailable and that fallback is explicitly intended.
-- Add tests for in-cluster config failure and clientset creation failure, not just fake-client happy-path reads.
-- Add a test for a ConfigMap key present but containing whitespace-only content if "non-empty" is meant semantically rather than byte-length only.
-- Specify the `klog` mitigation explicitly, such as redirecting/initializing `klog` to stderr before any client-go code executes.
-- Add an integration-style test at the plugin layer that a `k6-operator` config reaches the provider path without requiring Grafana Cloud credentials.
+- Resolve namespace propagation now. Options:
+  - Add namespace to `PluginConfig` during `metric`/`step` parsing from the rollout/analysis context.
+  - Or extend provider method inputs so runtime namespace is available without encoding it into config.
+- Do not fall back to `"default"` unless the requirements are changed. If rollout namespace cannot be plumbed in Phase 7, call that out as an unmet criterion instead of silently changing behavior.
+- Reconsider permanent error caching. A mutex-guarded lazy init that retries until success is safer than `sync.Once` if first-use failures can be transient.
+- Be explicit about `Validate()` scope:
+  - Syntactic validation only, or
+  - Full existence checks that call Kubernetes.
+  Right now the plan implies both.
+- Add tests for namespace precedence:
+  - explicit `cfg.Namespace`
+  - omitted namespace using rollout namespace
+  - empty namespace when no rollout namespace is available, if that state can exist
+- Document user-visible semantics for this phase: routing and script loading are implemented; operator execution is still stubbed until Phase 8.
 
 #### Risk Assessment
-**MEDIUM-HIGH.** The scope is still reasonable, but this wave carries the real behavior change and has a few architectural mismatches that could cause phase-goal failure even if unit tests pass: especially `InitPlugin` vs lazy init, validation ordering, and ambiguous namespace/script propagation semantics.
+**MEDIUM-HIGH**. The provider ownership and lazy-init structure are solid, but the namespace-default mismatch means the current plan does not fully meet the phase goal as written. That is the main issue to fix before implementation.
 
 ---
 
 ## Consensus Summary
 
-*Single reviewer -- consensus analysis requires 2+ reviewers.*
+*Single reviewer (Codex) — consensus analysis requires 2+ reviewers. Findings below are from Codex only.*
 
 ### Key Concerns (prioritized)
 
-1. **Validation boundary trap (HIGH)** -- `metric.parseConfig()` and `step.parseConfig()` currently require Grafana Cloud fields (`apiToken`, `stackId`). k6-operator configs will fail validation before reaching the Router unless config validation is refactored to be per-provider.
+1. **Validation interface contract (HIGH — partially resolved)** — Plan 01 keeps Validate() outside the Provider interface (on K6OperatorProvider directly) and uses IsGrafanaCloud() in parseConfig. This avoids interface changes but leaves validation split across metric.go and step.go. Acceptable for Phase 7 scope but creates drift risk.
 
-2. **InitPlugin vs lazy init mismatch (HIGH)** -- Success criterion says "creates a working Kubernetes client during InitPlugin" but the plan uses lazy `sync.Once` init on first k6-operator call. Needs explicit reconciliation.
+2. **Namespace fallback chain (HIGH — acknowledged, deferred)** — Plan 02 uses cfg.Namespace -> "default" fallback. D-09 says "rollout namespace." Revised plan explicitly defers rollout namespace injection to Phase 8 and documents the gap. The success criterion should be validated against this deferred scope.
 
-3. **sync.Once permanent failure (HIGH)** -- If `rest.InClusterConfig()` fails transiently, `ensureClient()` caches the error permanently. Plan should state whether this is intentional (process restart required) or if retry is needed.
+3. **Rollout namespace plumbing (HIGH — deferred to Phase 8)** — No mechanism in Phase 7 to inject rollout/AnalysisRun namespace into cfg.Namespace. Phase 8 will have metric/step layers populate it from ObjectMeta. Acceptable if Phase 7 success criteria don't require rollout namespace behavior.
 
-4. **Script content propagation (MEDIUM)** -- FOUND-03 requires script content "available to downstream providers." The plan reads it internally in `readScript()` but doesn't specify how it reaches Phase 8's TestRun CR creation.
+4. **sync.Once permanent failure (MEDIUM — explicitly addressed)** — Revised plan documents permanent failure as intentional design, adds dedicated test and block comment. InClusterConfig reads local pod filesystem, not network. Acceptable design choice.
 
-5. **Namespace resolution ambiguity (MEDIUM)** -- Roadmap says "rollout namespace default," plan says `"default"` fallback. These are different behaviors.
+5. **Script content propagation (MEDIUM — documented)** — readScript returns string. TriggerRun uses it internally. Phase 8's createTestRun will consume it. Contract documented in TriggerRun block comment.
+
+6. **Stub TriggerRun returns error (MEDIUM)** — k6-operator routing works end-to-end but actual execution returns "not yet implemented." Phase 7 goal is routing + script loading, not execution. Acceptable but should be clear in phase documentation.
 
 ### Strengths Confirmed
-- Two-wave split is clean and reviewable
+- Two-plan split is clean and reviewable
 - Router pattern fits the existing codebase well
 - Backward compatibility preserved for Grafana Cloud users
 - TDD approach with fake client injection is testable and sound
 - Scope is appropriately narrow for foundation work
+- Review concerns from pass 1 were systematically addressed in revised plans
 
-### Actionable Items Before Execution
-1. Refactor `parseConfig()` validation to be per-provider aware (or defer Grafana Cloud field checks to the cloud provider)
-2. Reconcile InitPlugin success criterion with lazy init design
-3. Document sync.Once failure-is-permanent as intentional design choice
-4. Define script content contract for downstream consumption
-5. Pin down namespace fallback chain: config -> rollout namespace -> "default"
+### Resolution Status (vs Pass 1)
+
+| Pass 1 Concern | Severity | Status in Pass 2 |
+|----------------|----------|-------------------|
+| Config validation trap (parseConfig requires GC fields) | HIGH | **Resolved** — parseConfig refactored with IsGrafanaCloud() gating |
+| InitPlugin vs lazy init mismatch | HIGH | **Resolved** — success criterion updated to say "lazily on first k6-operator provider call via sync.Once" |
+| sync.Once permanent failure | HIGH | **Resolved** — documented as intentional, test + block comment added |
+| Script content propagation | MEDIUM | **Resolved** — contract documented in TriggerRun, readScript returns string for Phase 8 |
+| Namespace resolution ambiguity | MEDIUM | **Partially resolved** — explicit fallback chain documented, rollout namespace deferred to Phase 8 |
+
+### Remaining Items Before Execution
+1. Confirm Phase 7 success criteria don't require rollout namespace injection (deferred to Phase 8)
+2. Consider centralizing per-provider validation to reduce drift risk between metric.go and step.go
+3. Ensure unknown providers are rejected as early as possible (parseConfig or Router dispatch)
