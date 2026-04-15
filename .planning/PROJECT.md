@@ -20,7 +20,7 @@ Rollouts automatically pass or roll back based on real load test results — no 
 
 ## Current State
 
-Shipped **v0.2.0** on 2026-04-15. CI pipeline hardened, automated dependency management enabled.
+Shipped **v0.2.0** on 2026-04-15. Phase 7 complete — provider routing and ConfigMap script sourcing foundation in place for k6-operator.
 
 - **Go LOC:** ~23,800 across 95 files
 - **Test coverage:** 91.7% (metric), 89.1% (step)
@@ -42,6 +42,8 @@ Shipped **v0.2.0** on 2026-04-15. CI pipeline hardened, automated dependency man
 - ✓ README, CONTRIBUTING, and community documentation — v1.0 (Phase 4)
 - ✓ e2e CI pipeline with kind install and correct timeout — v0.2.0 (Phase 5)
 - ✓ Renovate bot for automated Go module and GitHub Actions dependency updates — v0.2.0 (Phase 6)
+- ✓ Provider routing between execution backends (grafana-cloud, k6-operator) — v0.3.0 (Phase 7)
+- ✓ In-cluster Kubernetes client with lazy init and ConfigMap script reading — v0.3.0 (Phase 7)
 
 ### Active
 
@@ -113,4 +115,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-15 after v0.3.0 milestone start*
+*Last updated: 2026-04-15 after Phase 7 completion*
