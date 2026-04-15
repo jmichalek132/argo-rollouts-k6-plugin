@@ -51,11 +51,11 @@ Full details: [milestones/v0.2.0-ROADMAP.md](milestones/v0.2.0-ROADMAP.md)
 **Requirements**: FOUND-01, FOUND-02, FOUND-03
 **Success Criteria** (what must be TRUE):
   1. Plugin config with `provider: "k6-operator"` routes to the k6-operator backend; omitting `provider` or setting `provider: "grafana-cloud"` routes to the existing Grafana Cloud backend (backward compatible)
-  2. Plugin creates a working Kubernetes client from in-cluster service account credentials during InitPlugin
-  3. Plugin reads a k6 .js script body from a ConfigMap by name and key, and that script content is available to downstream providers
+  2. Plugin can create a working Kubernetes client from in-cluster service account credentials, initialized lazily on first k6-operator provider call via sync.Once (grafana-cloud-only deployments never touch the k8s API)
+  3. Plugin reads a k6 .js script body from a ConfigMap by name and key, and that script content is available to downstream providers via the readScript internal method (consumed by Phase 8 TriggerRun for TestRun CR creation)
 **Plans:** 2 plans
 Plans:
-- [ ] 07-01-PLAN.md -- Config extension, Router multiplexer, k8s dependency promotion
+- [ ] 07-01-PLAN.md -- Config extension, Router multiplexer, per-provider parseConfig validation, k8s dependency promotion
 - [ ] 07-02-PLAN.md -- K6OperatorProvider with lazy k8s client and ConfigMap reading, main.go wiring
 
 ### Phase 8: k6-operator Provider
