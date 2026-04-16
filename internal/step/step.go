@@ -68,7 +68,7 @@ func (k *K6StepPlugin) Type() string {
 // First call: triggers a k6 test run (or attaches to an existing one via testRunId).
 // Subsequent calls: polls GetRunResult until terminal state.
 // Terminal: returns PhaseSuccessful (Passed) or PhaseFailed (Failed/Errored/Aborted/timeout).
-func (k *K6StepPlugin) Run(_ *v1alpha1.Rollout, ctx *types.RpcStepContext) (types.RpcStepResult, types.RpcError) {
+func (k *K6StepPlugin) Run(rollout *v1alpha1.Rollout, ctx *types.RpcStepContext) (types.RpcStepResult, types.RpcError) {
 	cfg, err := k.parseConfig(ctx)
 	if err != nil {
 		return types.RpcStepResult{
@@ -76,6 +76,8 @@ func (k *K6StepPlugin) Run(_ *v1alpha1.Rollout, ctx *types.RpcStepContext) (type
 			Message: err.Error(),
 		}, types.RpcError{}
 	}
+
+	populateFromRollout(cfg, rollout, "step.Run")
 
 	timeout, err := parseTimeout(cfg.Timeout)
 	if err != nil {
@@ -196,21 +198,21 @@ func (k *K6StepPlugin) Run(_ *v1alpha1.Rollout, ctx *types.RpcStepContext) (type
 }
 
 // Terminate stops an active run and returns an empty result (D-07).
-func (k *K6StepPlugin) Terminate(_ *v1alpha1.Rollout, ctx *types.RpcStepContext) (types.RpcStepResult, types.RpcError) {
-	k.stopActiveRun(ctx, "terminate")
+func (k *K6StepPlugin) Terminate(rollout *v1alpha1.Rollout, ctx *types.RpcStepContext) (types.RpcStepResult, types.RpcError) {
+	k.stopActiveRun(rollout, ctx, "terminate")
 	return types.RpcStepResult{}, types.RpcError{}
 }
 
 // Abort reverts actions performed during Run by stopping the active run (D-07).
-func (k *K6StepPlugin) Abort(_ *v1alpha1.Rollout, ctx *types.RpcStepContext) (types.RpcStepResult, types.RpcError) {
-	k.stopActiveRun(ctx, "abort")
+func (k *K6StepPlugin) Abort(rollout *v1alpha1.Rollout, ctx *types.RpcStepContext) (types.RpcStepResult, types.RpcError) {
+	k.stopActiveRun(rollout, ctx, "abort")
 	return types.RpcStepResult{}, types.RpcError{}
 }
 
 // stopActiveRun is a shared helper for Terminate and Abort.
 // It parses config and state, then calls StopRun if a runId is present.
 // Errors are logged but never returned (D-08).
-func (k *K6StepPlugin) stopActiveRun(ctx *types.RpcStepContext, action string) {
+func (k *K6StepPlugin) stopActiveRun(rollout *v1alpha1.Rollout, ctx *types.RpcStepContext, action string) {
 	cfg, err := k.parseConfig(ctx)
 	if err != nil {
 		slog.Warn("failed to parse config during "+action,
@@ -218,6 +220,8 @@ func (k *K6StepPlugin) stopActiveRun(ctx *types.RpcStepContext, action string) {
 		)
 		return
 	}
+
+	populateFromRollout(cfg, rollout, "step."+action)
 
 	var state stepState
 	if len(ctx.Status) > 0 {
@@ -240,6 +244,32 @@ func (k *K6StepPlugin) stopActiveRun(ctx *types.RpcStepContext, action string) {
 			"runId", state.RunID,
 			"error", err,
 		)
+	}
+}
+
+// populateFromRollout injects Rollout metadata into cfg per D-01/D-05/D-06/D-09.
+//   - Namespace: rollout.Namespace wins ONLY when cfg.Namespace is empty (D-01: user cfg wins).
+//   - RolloutName: from rollout.Name (D-06: the Rollout IS the parent, no owner-ref walk).
+//   - RolloutUID: from string(rollout.UID) (D-05: used by parentOwnerRef for the Rollout
+//     owner reference since the step plugin has no AnalysisRun).
+//   - AnalysisRunName / AnalysisRunUID: intentionally NOT set -- step plugin has no AR (D-05).
+//   - Nil Rollout: warn and skip all extraction (D-09). Matches the gob-boundary defense.
+//     Note: nil rollout preserves pre-fix behavior but downstream StopRun behavior with
+//     under-populated cfg is provider-specific (R8 from codex review).
+//
+// phase identifies which caller emitted the warning for log grep-ability.
+func populateFromRollout(cfg *provider.PluginConfig, rollout *v1alpha1.Rollout, phase string) {
+	if rollout == nil {
+		slog.Warn("nil Rollout received; skipping metadata extraction",
+			"phase", phase,
+		)
+		return
+	}
+
+	cfg.RolloutName = rollout.Name
+	cfg.RolloutUID = string(rollout.UID)
+	if cfg.Namespace == "" {
+		cfg.Namespace = rollout.Namespace
 	}
 }
 
