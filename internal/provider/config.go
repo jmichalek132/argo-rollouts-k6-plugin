@@ -1,6 +1,10 @@
 package provider
 
-import "fmt"
+import (
+	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
+)
 
 // ConfigMapRef references a key in a Kubernetes ConfigMap.
 type ConfigMapRef struct {
@@ -25,6 +29,18 @@ type PluginConfig struct {
 	// k6-operator fields (per D-04, D-09)
 	ConfigMapRef *ConfigMapRef `json:"configMapRef,omitempty"`
 	Namespace    string        `json:"namespace,omitempty"`
+
+	// Phase 8 k6-operator fields (per D-06)
+	Parallelism int                          `json:"parallelism,omitempty"`
+	Resources   *corev1.ResourceRequirements `json:"resources,omitempty"`
+	RunnerImage string                       `json:"runnerImage,omitempty"`
+	Env         []corev1.EnvVar              `json:"env,omitempty"`
+	Arguments   []string                     `json:"arguments,omitempty"`
+
+	// Injected by step/metric plugin layer (not from user JSON config).
+	// Used for CR naming (per D-10), labels, and owner references.
+	RolloutName    string `json:"-"` // from Rollout ObjectMeta.Name
+	AnalysisRunUID string `json:"-"` // from AnalysisRun ObjectMeta.UID (per D-09)
 }
 
 // IsGrafanaCloud returns true when the config targets the Grafana Cloud backend.
@@ -67,6 +83,9 @@ func (c *PluginConfig) ValidateK6Operator() error {
 	}
 	if c.ConfigMapRef.Key == "" {
 		return fmt.Errorf("configMapRef.key is required")
+	}
+	if c.Parallelism < 0 {
+		return fmt.Errorf("parallelism must be non-negative, got %d", c.Parallelism)
 	}
 	return nil
 }
