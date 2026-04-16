@@ -73,6 +73,18 @@ Plans:
 - [x] 08-01-PLAN.md -- k6-operator dep, PluginConfig extension, TestRun CR construction helpers, exit code mapping
 - [x] 08-02-PLAN.md -- TriggerRun/GetRunResult/StopRun implementation with dynamic client
 
+### Phase 08.1: Wire AnalysisRun/Rollout metadata through plugin layers (INSERTED)
+
+**Goal**: Bug fix: plugin layers (metric.go, step.go) extract AnalysisRun/Rollout metadata and populate cfg.Namespace, cfg.RolloutName, cfg.AnalysisRunName, cfg.AnalysisRunUID, and a new cfg.RolloutUID field before dispatching to providers, with AR-over-Rollout owner-ref precedence in the k6-operator provider. Exposed by Phase 10 e2e tests.
+**Requirements**: None (bug fix inserted post-Phase-10; not mapped to REQ-IDs)
+**Depends on:** Phase 8
+**Plans:** 3 plans
+
+Plans:
+- [ ] 08.1-01-PLAN.md -- Add PluginConfig.RolloutUID field, refactor owner-ref helper to AR > Rollout > none precedence (parentOwnerRef), new operator tests
+- [ ] 08.1-02-PLAN.md -- Wire AnalysisRun metadata (Namespace/RolloutName/AnalysisRunName/AnalysisRunUID) through metric.go Run/Resume/Terminate with owner-ref walk; new metric tests
+- [ ] 08.1-03-PLAN.md -- Wire Rollout metadata (Namespace/RolloutName/RolloutUID) through step.go Run/Terminate/Abort via stopActiveRun; new step tests
+
 ### Phase 9: Metric Integration
 **Goal**: Metric plugin extracts k6 result metrics from in-cluster test runs for AnalysisTemplate successCondition evaluation
 **Depends on**: Phase 8
