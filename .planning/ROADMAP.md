@@ -93,7 +93,10 @@ Plans:
   1. RBAC example ClusterRole grants all permissions needed for k6-operator TestRun CRDs, pods, pods/log, and configmaps
   2. Example AnalysisTemplate and Rollout YAML for k6-operator provider works out of the box when applied to a cluster with k6-operator installed
   3. e2e test suite on kind cluster creates a TestRun CR, waits for completion, and validates result extraction against a mock target service
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 10-01-PLAN.md -- k6-operator example YAML directory (RBAC, AnalysisTemplate, Rollout, ConfigMap script, README) and main README update
+- [ ] 10-02-PLAN.md -- e2e test suite with k6-operator install, mock server health endpoint, testdata fixtures, and k6-operator test functions
 
 ## Progress
 
@@ -111,4 +114,4 @@ Phases execute in numeric order: 7 → 8 → 9 → 10
 | 7. Foundation & Kubernetes Client | v0.3.0 | 0/2 | Not started | - |
 | 8. k6-operator Provider | v0.3.0 | 0/2 | Not started | - |
 | 9. Metric Integration | v0.3.0 | 0/2 | Not started | - |
-| 10. Documentation & E2E | v0.3.0 | 0/0 | Not started | - |
+| 10. Documentation & E2E | v0.3.0 | 0/2 | Not started | - |
