@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -21,6 +22,7 @@ var _ provider.Provider = (*K6OperatorProvider)(nil)
 type K6OperatorProvider struct {
 	clientOnce sync.Once
 	client     kubernetes.Interface
+	dynClient  dynamic.Interface
 	clientErr  error
 }
 
@@ -34,6 +36,15 @@ func WithClient(c kubernetes.Interface) Option {
 		p.client = c
 		// Mark clientOnce as done so ensureClient() returns the injected client.
 		p.clientOnce.Do(func() {})
+	}
+}
+
+// WithDynClient injects a dynamic Kubernetes client for testing.
+// Must be used alongside WithClient -- WithClient marks clientOnce as done,
+// so WithDynClient only needs to set the field.
+func WithDynClient(c dynamic.Interface) Option {
+	return func(p *K6OperatorProvider) {
+		p.dynClient = c
 	}
 }
 
@@ -65,7 +76,7 @@ func (p *K6OperatorProvider) Name() string {
 //
 // If retry-on-failure were needed (it is not for this use case), replace sync.Once
 // with a mutex + cached state pattern.
-func (p *K6OperatorProvider) ensureClient() (kubernetes.Interface, error) {
+func (p *K6OperatorProvider) ensureClient() (kubernetes.Interface, dynamic.Interface, error) {
 	p.clientOnce.Do(func() {
 		cfg, err := rest.InClusterConfig()
 		if err != nil {
@@ -77,13 +88,17 @@ func (p *K6OperatorProvider) ensureClient() (kubernetes.Interface, error) {
 			return
 		}
 		p.client, p.clientErr = kubernetes.NewForConfig(cfg)
+		if p.clientErr != nil {
+			return
+		}
+		p.dynClient, p.clientErr = dynamic.NewForConfig(cfg)
 		if p.clientErr == nil {
 			slog.Info("kubernetes client initialized",
 				"provider", p.Name(),
 			)
 		}
 	})
-	return p.client, p.clientErr
+	return p.client, p.dynClient, p.clientErr
 }
 
 // readScript reads a k6 script from a Kubernetes ConfigMap (per D-08, D-10).
@@ -101,7 +116,7 @@ func (p *K6OperatorProvider) ensureClient() (kubernetes.Interface, error) {
 // will get the rollout's namespace automatically. For Phase 7, "default" is the fallback
 // when cfg.Namespace is unset because the rollout namespace plumbing does not exist yet.
 func (p *K6OperatorProvider) readScript(ctx context.Context, cfg *provider.PluginConfig) (string, error) {
-	client, err := p.ensureClient()
+	client, _, err := p.ensureClient()
 	if err != nil {
 		return "", err
 	}
@@ -148,23 +163,7 @@ func (p *K6OperatorProvider) Validate(cfg *provider.PluginConfig) error {
 }
 
 // TriggerRun validates config and reads the k6 script (Phase 7 stub).
-//
-// PHASE 7 STUB BEHAVIOR (addresses pass 2 MEDIUM review concern):
-// In Phase 7, TriggerRun validates config fields, reads the k6 script from ConfigMap
-// to prove the pipeline works end-to-end, then returns an error indicating that
-// actual k6-operator execution is not yet implemented. This means:
-//   - Routing to k6-operator: WORKS (Router resolves and dispatches correctly)
-//   - Config validation: WORKS (ValidateK6Operator checks fields, parseConfig gates by provider)
-//   - Script loading: WORKS (readScript fetches ConfigMap content)
-//   - Test execution: NOT YET AVAILABLE (returns error, Phase 8 will implement)
-//
-// Script content contract (addresses MEDIUM review concern -- script propagation):
-// readScript() returns the k6 script body as a string. In this Phase 7 stub,
-// the script is loaded and logged but not used further. In Phase 8, TriggerRun
-// will pass the script content to the TestRun CR creation function, embedding it
-// in the TestRun spec.script.configMap structure. The contract is:
-//
-//	readScript(ctx, cfg) -> string (script body, used by Phase 8's createTestRun)
+// Phase 8 will replace this with real TestRun CR creation.
 func (p *K6OperatorProvider) TriggerRun(ctx context.Context, cfg *provider.PluginConfig) (string, error) {
 	if err := cfg.ValidateK6Operator(); err != nil {
 		return "", err
