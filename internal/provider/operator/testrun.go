@@ -65,20 +65,35 @@ func testRunName(rolloutName, namespace string) string {
 	return fmt.Sprintf("k6-%s-%s", rolloutName, short)
 }
 
-// analysisRunOwnerRef creates an OwnerReference for the AnalysisRun (per D-09).
-// If analysisRunUID is empty, returns nil (fallback to label-based identification).
-// Both Name and UID are required: the Kubernetes API server validates that Name is
-// non-empty in OwnerReferences, and UID is used for the actual GC lookup.
-func analysisRunOwnerRef(analysisRunName, analysisRunUID string) []metav1.OwnerReference {
-	if analysisRunUID == "" {
-		return nil
+// parentOwnerRef returns an owner reference for the TestRun/PrivateLoadZone CR based
+// on D-07 precedence (AR > Rollout > none). The most-immediate parent gets the GC
+// relationship -- metric plugin naturally selects AR; step plugin naturally selects
+// Rollout. When both UIDs are empty, returns nil (no owner reference) which the
+// Kubernetes API server accepts -- CRs will still be discoverable via the
+// app.kubernetes.io/managed-by and k6-plugin/rollout labels.
+//
+// Caller invariant: caller MUST set both the UID and the matching Name for the chosen
+// parent; this helper does not validate non-empty names. The Kubernetes API server
+// will reject OwnerReferences with empty Name, so an empty Name here will surface as
+// a Create error, not a silent corruption.
+func parentOwnerRef(cfg *provider.PluginConfig) []metav1.OwnerReference {
+	if cfg.AnalysisRunUID != "" {
+		return []metav1.OwnerReference{{
+			APIVersion: "argoproj.io/v1alpha1",
+			Kind:       "AnalysisRun",
+			Name:       cfg.AnalysisRunName,
+			UID:        types.UID(cfg.AnalysisRunUID),
+		}}
 	}
-	return []metav1.OwnerReference{{
-		APIVersion: "argoproj.io/v1alpha1",
-		Kind:       "AnalysisRun",
-		Name:       analysisRunName,
-		UID:        types.UID(analysisRunUID),
-	}}
+	if cfg.RolloutUID != "" {
+		return []metav1.OwnerReference{{
+			APIVersion: "argoproj.io/v1alpha1",
+			Kind:       "Rollout",
+			Name:       cfg.RolloutName,
+			UID:        types.UID(cfg.RolloutUID),
+		}}
+	}
+	return nil
 }
 
 // encodeRunID encodes the full lifecycle identity of a CR so that GetRunResult
@@ -135,7 +150,7 @@ func buildTestRun(cfg *provider.PluginConfig, scriptCMName, scriptKey, namespace
 				labelManagedBy: managedByValue,
 				labelRollout:   sanitizeLabelValue(cfg.RolloutName),
 			},
-			OwnerReferences: analysisRunOwnerRef(cfg.AnalysisRunName, cfg.AnalysisRunUID),
+			OwnerReferences: parentOwnerRef(cfg),
 		},
 		Spec: k6v1alpha1.TestRunSpec{
 			Script: k6v1alpha1.K6Script{
@@ -177,7 +192,7 @@ func buildPrivateLoadZone(cfg *provider.PluginConfig, namespace, crName string) 
 				labelManagedBy: managedByValue,
 				labelRollout:   sanitizeLabelValue(cfg.RolloutName),
 			},
-			OwnerReferences: analysisRunOwnerRef(cfg.AnalysisRunName, cfg.AnalysisRunUID),
+			OwnerReferences: parentOwnerRef(cfg),
 		},
 		Spec: k6v1alpha1.PrivateLoadZoneSpec{
 			Token: cfg.APIToken,
