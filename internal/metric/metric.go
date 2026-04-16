@@ -63,7 +63,7 @@ func (k *K6MetricProvider) GarbageCollect(_ *v1alpha1.AnalysisRun, _ v1alpha1.Me
 // Run triggers a k6 test run (or attaches to an existing one) and returns a Running measurement.
 // If testRunId is provided in config, it uses that run (poll-only mode, D-04).
 // Otherwise, it calls TriggerRun to start a new run.
-func (k *K6MetricProvider) Run(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metric) v1alpha1.Measurement {
+func (k *K6MetricProvider) Run(ar *v1alpha1.AnalysisRun, metric v1alpha1.Metric) v1alpha1.Measurement {
 	startedAt := metav1.Now()
 	measurement := v1alpha1.Measurement{
 		Phase:     v1alpha1.AnalysisPhaseRunning,
@@ -75,6 +75,8 @@ func (k *K6MetricProvider) Run(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metric) 
 	if err != nil {
 		return metricutil.MarkMeasurementError(measurement, err)
 	}
+
+	populateFromAnalysisRun(cfg, ar, "metric.Run")
 
 	ctx, cancel := context.WithTimeout(context.Background(), providerCallTimeout)
 	defer cancel()
@@ -97,17 +99,22 @@ func (k *K6MetricProvider) Run(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metric) 
 		"runId", runID,
 		"metric", cfg.Metric,
 		"mode", triggerMode(cfg),
+		"namespace", cfg.Namespace,
+		"rollout", cfg.RolloutName,
+		"analysisRun", cfg.AnalysisRunName,
 	)
 	return measurement
 }
 
 // Resume polls GetRunResult and returns the metric value with the appropriate analysis phase.
 // Sets metadata on every call (D-11/D-12): runId, testRunURL, runState, metricValue.
-func (k *K6MetricProvider) Resume(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metric, measurement v1alpha1.Measurement) v1alpha1.Measurement {
+func (k *K6MetricProvider) Resume(ar *v1alpha1.AnalysisRun, metric v1alpha1.Metric, measurement v1alpha1.Measurement) v1alpha1.Measurement {
 	cfg, err := parseConfig(metric)
 	if err != nil {
 		return metricutil.MarkMeasurementError(measurement, err)
 	}
+
+	populateFromAnalysisRun(cfg, ar, "metric.Resume")
 
 	if measurement.Metadata == nil {
 		measurement.Metadata = map[string]string{}
@@ -163,16 +170,21 @@ func (k *K6MetricProvider) Resume(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metri
 		"state", result.State,
 		"phase", measurement.Phase,
 		"value", valueStr,
+		"namespace", cfg.Namespace,
+		"rollout", cfg.RolloutName,
+		"analysisRun", cfg.AnalysisRunName,
 	)
 	return measurement
 }
 
 // Terminate stops an active run and returns a PhaseError measurement (D-15/D-16).
-func (k *K6MetricProvider) Terminate(_ *v1alpha1.AnalysisRun, metric v1alpha1.Metric, measurement v1alpha1.Measurement) v1alpha1.Measurement {
+func (k *K6MetricProvider) Terminate(ar *v1alpha1.AnalysisRun, metric v1alpha1.Metric, measurement v1alpha1.Measurement) v1alpha1.Measurement {
 	cfg, err := parseConfig(metric)
 	if err != nil {
 		return metricutil.MarkMeasurementError(measurement, err)
 	}
+
+	populateFromAnalysisRun(cfg, ar, "metric.Terminate")
 
 	if measurement.Metadata == nil {
 		measurement.Metadata = map[string]string{}
@@ -195,6 +207,46 @@ func (k *K6MetricProvider) Terminate(_ *v1alpha1.AnalysisRun, metric v1alpha1.Me
 	finishedAt := metav1.Now()
 	measurement.FinishedAt = &finishedAt
 	return measurement
+}
+
+// populateFromAnalysisRun injects AR metadata into cfg per D-01/D-03/D-04/D-09.
+//   - Namespace: ar.Namespace wins ONLY when cfg.Namespace is empty (D-01: user cfg wins).
+//   - RolloutName: walked from ar.OwnerReferences for the Rollout controller ref (D-03).
+//     The Argo Rollouts controller stamps exactly one such ref on every AR it creates
+//     (verified: argo-rollouts rollout/analysis.go:502 NewControllerRef(c.rollout, ...)).
+//     Only the entry with Controller==true wins; a plain Kind==Rollout ref without the
+//     Controller flag must NOT hijack RolloutName.
+//     Standalone ARs (kubectl-applied fixtures, manual troubleshooting) have no owner ref;
+//     we log a warning and leave RolloutName empty (D-04).
+//   - AnalysisRunName and AnalysisRunUID: always set from AR ObjectMeta when ar is non-nil.
+//   - Nil AR: warn and skip all extraction (D-09). Matches the gob-boundary defense.
+//
+// phase identifies which caller emitted the warning for log grep-ability.
+func populateFromAnalysisRun(cfg *provider.PluginConfig, ar *v1alpha1.AnalysisRun, phase string) {
+	if ar == nil {
+		slog.Warn("nil AnalysisRun received; skipping metadata extraction",
+			"phase", phase,
+		)
+		return
+	}
+
+	cfg.AnalysisRunName = ar.Name
+	cfg.AnalysisRunUID = string(ar.UID)
+	if cfg.Namespace == "" {
+		cfg.Namespace = ar.Namespace
+	}
+
+	for _, owner := range ar.OwnerReferences {
+		if owner.Kind == "Rollout" && owner.Controller != nil && *owner.Controller {
+			cfg.RolloutName = owner.Name
+			return
+		}
+	}
+
+	slog.Warn("standalone AnalysisRun (no Rollout owner ref); RolloutName left empty",
+		"analysisRun", ar.Name,
+		"namespace", ar.Namespace,
+	)
 }
 
 // parseConfig extracts and validates the plugin config from the metric spec.
