@@ -67,6 +67,26 @@ spec:
 			return ctx
 		}).
 		Assess("rollout advances past k6-operator step and TestRun was created", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			// Poll for TestRun creation BEFORE waiting for Healthy. This avoids a race
+			// where the TestRun is garbage-collected (or cleaned up by a future
+			// Terminate hook) between Rollout reaching Healthy and the assertion
+			// reading the list. Observing the TestRun first also proves the step
+			// plugin executed -- not just that the Rollout happens to be Healthy.
+			testRunDeadline := time.Now().Add(5 * time.Minute)
+			var seenTestRuns int
+			for time.Now().Before(testRunDeadline) {
+				n, err := countTestRuns(cfg, cfg.Namespace())
+				if err == nil && n >= 1 {
+					seenTestRuns = n
+					break
+				}
+				time.Sleep(3 * time.Second)
+			}
+			if seenTestRuns < 1 {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("timed out waiting for step plugin to create a TestRun CR")
+			}
+
 			// 5-minute timeout: real k6 execution + pod scheduling takes longer than mocked tests.
 			phase, err := waitForRolloutPhase(cfg, "k6-step-k6op-e2e", cfg.Namespace(), "Healthy", 5*time.Minute)
 			if err != nil {
@@ -77,17 +97,6 @@ spec:
 			if phase != "Healthy" {
 				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
 				t.Errorf("expected Rollout phase Healthy, got %s", phase)
-			}
-
-			// Verify the step plugin actually created a TestRun CR (not just coincidentally Healthy).
-			testRunCount, err := countTestRuns(cfg, cfg.Namespace())
-			if err != nil {
-				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
-				t.Fatalf("list TestRuns: %v", err)
-			}
-			if testRunCount < 1 {
-				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
-				t.Errorf("expected at least 1 TestRun created by step plugin, got %d", testRunCount)
 			}
 			return ctx
 		}).
