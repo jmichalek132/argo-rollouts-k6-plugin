@@ -596,3 +596,161 @@ func TestValidate_SyntacticOnly(t *testing.T) {
 	err := p.Validate(cfg)
 	require.NoError(t, err, "Validate must not require K8s client (syntactic-only)")
 }
+
+// --- WithLogReader tests ---
+
+func TestWithLogReader(t *testing.T) {
+	mock := &mockPodLogReader{logs: map[string]string{}}
+	p := NewK6OperatorProvider(WithLogReader(mock))
+	assert.NotNil(t, p.logReader, "WithLogReader must set logReader field")
+}
+
+// --- GetRunResult metric integration tests ---
+
+func TestGetRunResult_WithSummaryMetrics(t *testing.T) {
+	// Finished TestRun, exit code 0, valid handleSummary JSON in pod logs.
+	// Expects: Passed state with populated metrics from handleSummary.
+	crName := testCRName
+	tr := fakeUnstructuredTestRun("test-ns", crName, "finished")
+	pod := testRunnerPod("test-ns", crName, 0) // exit code 0 = passed
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
+	fakeClient := k8sfake.NewSimpleClientset(pod)
+
+	// Build log content: mixed k6 output with valid handleSummary JSON at end.
+	logContent := `     execution: local
+        script: load-test.js
+     scenarios: (100.00%) 1 scenario
+
+running (1m30s), 0/10 VUs, 1000 complete iterations
+default   [==============================] 10 VUs  1m30s
+` + validSummaryJSON + "\n"
+
+	mockReader := &mockPodLogReader{
+		logs: map[string]string{
+			"test-ns/" + pod.Name: logContent,
+		},
+	}
+
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn), WithLogReader(mockReader))
+	cfg := defaultOperatorConfig()
+	runID := encodeRunID("test-ns", "testruns", crName)
+
+	result, err := p.GetRunResult(context.Background(), cfg, runID)
+	require.NoError(t, err)
+	assert.Equal(t, provider.Passed, result.State)
+	assert.True(t, result.ThresholdsPassed)
+	assert.InDelta(t, 0.023, result.HTTPReqFailed, 0.001)
+	assert.InDelta(t, 210.3, result.HTTPReqDuration.P50, 0.1)
+	assert.InDelta(t, 523.4, result.HTTPReqDuration.P95, 0.1)
+	assert.InDelta(t, 780.2, result.HTTPReqDuration.P99, 0.1)
+	assert.InDelta(t, 33.33, result.HTTPReqs, 0.01)
+}
+
+func TestGetRunResult_ThresholdsFailedWithMetrics(t *testing.T) {
+	// Finished TestRun, exit code 99, valid handleSummary JSON.
+	// Expects: Failed state with populated metrics (handleSummary metrics independent of threshold pass/fail).
+	crName := testCRName
+	tr := fakeUnstructuredTestRun("test-ns", crName, "finished")
+	pod := testRunnerPod("test-ns", crName, 99) // exit code 99 = thresholds failed
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
+	fakeClient := k8sfake.NewSimpleClientset(pod)
+
+	logContent := `     execution: local
+        script: load-test.js
+
+running (1m30s), 0/10 VUs, 1000 complete iterations
+default   [==============================] 10 VUs  1m30s
+` + validSummaryJSON + "\n"
+
+	mockReader := &mockPodLogReader{
+		logs: map[string]string{
+			"test-ns/" + pod.Name: logContent,
+		},
+	}
+
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn), WithLogReader(mockReader))
+	cfg := defaultOperatorConfig()
+	runID := encodeRunID("test-ns", "testruns", crName)
+
+	result, err := p.GetRunResult(context.Background(), cfg, runID)
+	require.NoError(t, err)
+	assert.Equal(t, provider.Failed, result.State)
+	assert.False(t, result.ThresholdsPassed)
+	// Metrics still populated even when thresholds failed.
+	assert.InDelta(t, 0.023, result.HTTPReqFailed, 0.001)
+	assert.InDelta(t, 210.3, result.HTTPReqDuration.P50, 0.1)
+	assert.InDelta(t, 523.4, result.HTTPReqDuration.P95, 0.1)
+	assert.InDelta(t, 780.2, result.HTTPReqDuration.P99, 0.1)
+	assert.InDelta(t, 33.33, result.HTTPReqs, 0.01)
+}
+
+func TestGetRunResult_NoSummaryGracefulDegradation(t *testing.T) {
+	// Finished TestRun, exit code 0, but pod logs have no handleSummary JSON.
+	// Expects: Passed state with zero metrics (graceful degradation per D-05).
+	crName := testCRName
+	tr := fakeUnstructuredTestRun("test-ns", crName, "finished")
+	pod := testRunnerPod("test-ns", crName, 0)
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
+	fakeClient := k8sfake.NewSimpleClientset(pod)
+
+	logContent := `     execution: local
+        script: load-test.js
+
+running (1m30s), 0/10 VUs, 1000 complete iterations
+default   [==============================] 10 VUs  1m30s
+
+     data_received..................: 1.2 MB 13 kB/s
+     http_req_duration..............: avg=234ms min=100ms med=210ms max=890ms p(90)=450ms p(95)=523ms
+`
+
+	mockReader := &mockPodLogReader{
+		logs: map[string]string{
+			"test-ns/" + pod.Name: logContent,
+		},
+	}
+
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn), WithLogReader(mockReader))
+	cfg := defaultOperatorConfig()
+	runID := encodeRunID("test-ns", "testruns", crName)
+
+	result, err := p.GetRunResult(context.Background(), cfg, runID)
+	require.NoError(t, err)
+	assert.Equal(t, provider.Passed, result.State)
+	assert.True(t, result.ThresholdsPassed)
+	assert.Equal(t, float64(0), result.HTTPReqFailed)
+	assert.Equal(t, float64(0), result.HTTPReqDuration.P95)
+	assert.Equal(t, float64(0), result.HTTPReqs)
+}
+
+func TestGetRunResult_NonTerminalSkipsMetrics(t *testing.T) {
+	// Started TestRun (non-terminal stage). Should NOT call parseSummaryFromPods.
+	crName := testCRName
+	tr := fakeUnstructuredTestRun("test-ns", crName, "started")
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
+	fakeClient := k8sfake.NewSimpleClientset()
+	// No mockReader needed -- parseSummaryFromPods should not be called for non-terminal states.
+
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
+	cfg := defaultOperatorConfig()
+	runID := encodeRunID("test-ns", "testruns", crName)
+
+	result, err := p.GetRunResult(context.Background(), cfg, runID)
+	require.NoError(t, err)
+	assert.Equal(t, provider.Running, result.State)
+}
+
+func TestGetRunResult_ErrorStateSkipsMetrics(t *testing.T) {
+	// TestRun with stage="error". Should NOT call parseSummaryFromPods.
+	crName := testCRName
+	tr := fakeUnstructuredTestRun("test-ns", crName, "error")
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
+	fakeClient := k8sfake.NewSimpleClientset()
+
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
+	cfg := defaultOperatorConfig()
+	runID := encodeRunID("test-ns", "testruns", crName)
+
+	result, err := p.GetRunResult(context.Background(), cfg, runID)
+	require.NoError(t, err)
+	assert.Equal(t, provider.Errored, result.State)
+}
