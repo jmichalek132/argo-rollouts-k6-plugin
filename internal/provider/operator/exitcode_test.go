@@ -212,3 +212,26 @@ func TestCheckRunnerExitCodes_RestartedContainer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, provider.Errored, state, "restarted container should be treated as Errored")
 }
+
+func TestCheckRunnerExitCodes_EmptyContainerStatuses(t *testing.T) {
+	// Pod exists but no ContainerStatuses yet (e.g., scheduled but containers not created).
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "k6-myapp-abc-runner-pending",
+			Namespace: "ns",
+			Labels: map[string]string{
+				"app":    "k6",
+				"k6_cr":  "k6-myapp-abc",
+				"runner": "true",
+			},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: nil, // no container statuses yet
+		},
+	}
+
+	client := fake.NewSimpleClientset(pod)
+	state, err := checkRunnerExitCodes(context.Background(), client, "ns", "k6-myapp-abc")
+	require.NoError(t, err)
+	assert.Equal(t, provider.Running, state, "empty ContainerStatuses should return Running (pod still starting)")
+}

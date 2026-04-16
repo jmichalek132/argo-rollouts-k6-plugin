@@ -86,6 +86,11 @@ func checkRunnerExitCodes(ctx context.Context, client kubernetes.Interface, ns, 
 
 	worst := provider.Passed
 	for _, pod := range pods.Items {
+		// Guard: pod exists but containers have not started yet (e.g., scheduled
+		// but image pull in progress). Treat as still running -- retry on next poll.
+		if len(pod.Status.ContainerStatuses) == 0 {
+			return provider.Running, nil
+		}
 		for _, cs := range pod.Status.ContainerStatuses {
 			// Restarted container = infrastructure problem (k6-operator sets backoff limit 0).
 			// Addresses review concern: restarted containers with prior exit codes.
