@@ -1,0 +1,44 @@
+# AnalysisTemplate for the k6-operator metric plugin.
+# Triggers an in-cluster k6-operator TestRun, waits for completion,
+# and evaluates results from handleSummary JSON in runner pod logs.
+#
+# This example uses metric: thresholds (pass/fail based on k6 thresholds).
+#
+# Other available metrics (replace the metrics block below):
+#
+#   HTTP error rate (result is a float 0.0-1.0):
+#     metric: http_req_failed
+#     successCondition: "result < 0.01"
+#
+#   HTTP latency P95 (result in milliseconds):
+#     metric: http_req_duration
+#     aggregation: p95
+#     successCondition: "result < 500"
+#
+#   HTTP throughput (result in requests/second):
+#     metric: http_reqs
+#     successCondition: "result > 100"
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: k6-operator-threshold-check
+spec:
+  args:
+    - name: script-configmap
+    - name: script-key
+      value: test.js
+    - name: namespace
+  metrics:
+    - name: k6-thresholds
+      interval: 15s
+      successCondition: "result == 1"
+      failureLimit: 0
+      provider:
+        plugin:
+          jmichalek132/k6:
+            provider: k6-operator
+            configMapRef:
+              name: "{{args.script-configmap}}"
+              key: "{{args.script-key}}"
+            namespace: "{{args.namespace}}"
+            metric: thresholds

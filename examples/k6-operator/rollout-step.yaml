@@ -1,0 +1,46 @@
+# Canary Rollout with k6-operator step plugin.
+# Triggers an in-cluster k6 load test at 20% canary weight,
+# waits for the test to complete, then promotes to 100%.
+#
+# NOTE: Argo Rollouts skips canary steps on the initial deployment.
+# The k6 step plugin will only execute when you push a second revision
+# (e.g., change the container image tag). See README.md for details.
+#
+# Prerequisites:
+#   1. k6-operator installed (kubectl apply --server-side -f https://raw.githubusercontent.com/grafana/k6-operator/v1.3.2/bundle.yaml)
+#   2. RBAC applied (kubectl apply -f clusterrole.yaml -f clusterrolebinding.yaml)
+#   3. k6 script ConfigMap created (kubectl apply -f configmap-script.yaml -n <namespace>)
+#   4. Plugin registered in argo-rollouts-config ConfigMap
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: my-app
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+        - name: my-app
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - plugin:
+            name: jmichalek132/k6-step
+            config:
+              provider: k6-operator
+              configMapRef:
+                name: k6-load-test
+                key: test.js
+              timeout: "5m"
+        - setWeight: 100

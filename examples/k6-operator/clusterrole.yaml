@@ -1,0 +1,33 @@
+# ClusterRole for the argo-rollouts-k6-plugin k6-operator provider.
+# Grants the Argo Rollouts controller permissions to manage k6-operator
+# TestRun CRDs, inspect runner pods, read pod logs, and read ConfigMaps.
+#
+# Apply this ClusterRole and its binding:
+#   kubectl apply -f clusterrole.yaml
+#   kubectl apply -f clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-rollouts-k6-plugin
+rules:
+  # TestRun and PrivateLoadZone CRDs (k6-operator)
+  # create: TriggerRun creates TestRun/PrivateLoadZone CRs
+  # get: GetRunResult polls TestRun stage
+  # list: forward-compatible (current code uses single Get)
+  # watch: forward-compatible (current code uses Get polling)
+  # delete: StopRun deletes CRs on rollout abort
+  - apiGroups: ["k6.io"]
+    resources: ["testruns", "privateloadzones"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  # Runner pod inspection for exit codes (checkRunnerExitCodes uses pods.List)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+  # Pod log reading for handleSummary metric extraction (GetLogs().Stream())
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # ConfigMap reading for k6 test scripts (readScript uses ConfigMaps.Get)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]

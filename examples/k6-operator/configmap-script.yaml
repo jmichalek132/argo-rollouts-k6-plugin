@@ -1,0 +1,42 @@
+# k6 test script for in-cluster execution via k6-operator.
+# The script runs HTTP requests against a target service and exports
+# handleSummary JSON to stdout for metric extraction by the plugin.
+#
+# IMPORTANT: The handleSummary function is required for the metric plugin
+# to extract detailed metrics (http_req_failed, http_req_duration, etc.)
+# from runner pod logs. Without it, only threshold pass/fail is available.
+#
+# Replace TARGET_URL with your application's cluster-internal service address.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-load-test
+data:
+  test.js: |
+    import http from "k6/http";
+    import { check } from "k6";
+
+    export const options = {
+      vus: 1,
+      iterations: 10,
+      thresholds: {
+        http_req_failed: ["rate<0.01"],
+        http_req_duration: ["p(95)<500"],
+      },
+    };
+
+    // TARGET_URL is injected via k6 runner pod environment variable.
+    // Default targets a service in the default namespace.
+    const TARGET_URL = __ENV.TARGET_URL || "http://my-app.default.svc.cluster.local";
+
+    export default function () {
+      const res = http.get(TARGET_URL);
+      check(res, { "status is 200": (r) => r.status === 200 });
+    }
+
+    // handleSummary writes k6 summary data as JSON to stdout.
+    // The argo-rollouts-k6-plugin reads this from runner pod logs
+    // to extract http_req_failed, http_req_duration, and http_reqs metrics.
+    export function handleSummary(data) {
+      return { stdout: JSON.stringify(data) };
+    }
