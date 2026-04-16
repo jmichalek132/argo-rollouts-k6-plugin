@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: k6-operator-threshold-e2e
+spec:
+  metrics:
+    - name: k6-thresholds
+      interval: 10s
+      count: 1
+      successCondition: "result == 1"
+      failureLimit: 0
+      provider:
+        plugin:
+          jmichalek132/k6:
+            provider: k6-operator
+            configMapRef:
+              name: k6-e2e-script
+              key: test.js
+            runnerImage: "grafana/k6:0.56.0"
+            metric: thresholds
