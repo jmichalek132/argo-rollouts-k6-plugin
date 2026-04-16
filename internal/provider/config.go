@@ -42,6 +42,7 @@ type PluginConfig struct {
 	RolloutName     string `json:"-"` // from Rollout ObjectMeta.Name
 	AnalysisRunName string `json:"-"` // from AnalysisRun ObjectMeta.Name (for OwnerReference)
 	AnalysisRunUID  string `json:"-"` // from AnalysisRun ObjectMeta.UID (per D-09)
+	RolloutUID      string `json:"-"` // from Rollout ObjectMeta.UID (for OwnerReference when no AnalysisRunUID, per D-07)
 }
 
 // IsGrafanaCloud returns true when the config targets the Grafana Cloud backend.
