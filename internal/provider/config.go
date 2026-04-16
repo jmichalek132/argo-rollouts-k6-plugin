@@ -39,8 +39,9 @@ type PluginConfig struct {
 
 	// Injected by step/metric plugin layer (not from user JSON config).
 	// Used for CR naming (per D-10), labels, and owner references.
-	RolloutName    string `json:"-"` // from Rollout ObjectMeta.Name
-	AnalysisRunUID string `json:"-"` // from AnalysisRun ObjectMeta.UID (per D-09)
+	RolloutName     string `json:"-"` // from Rollout ObjectMeta.Name
+	AnalysisRunName string `json:"-"` // from AnalysisRun ObjectMeta.Name (for OwnerReference)
+	AnalysisRunUID  string `json:"-"` // from AnalysisRun ObjectMeta.UID (per D-09)
 }
 
 // IsGrafanaCloud returns true when the config targets the Grafana Cloud backend.

@@ -51,14 +51,16 @@ func testRunName(rolloutName, namespace string) string {
 
 // analysisRunOwnerRef creates an OwnerReference for the AnalysisRun (per D-09).
 // If analysisRunUID is empty, returns nil (fallback to label-based identification).
-func analysisRunOwnerRef(analysisRunUID string) []metav1.OwnerReference {
+// Both Name and UID are required: the Kubernetes API server validates that Name is
+// non-empty in OwnerReferences, and UID is used for the actual GC lookup.
+func analysisRunOwnerRef(analysisRunName, analysisRunUID string) []metav1.OwnerReference {
 	if analysisRunUID == "" {
 		return nil
 	}
 	return []metav1.OwnerReference{{
 		APIVersion: "argoproj.io/v1alpha1",
 		Kind:       "AnalysisRun",
-		Name:       "", // Name is not strictly required for GC; UID is the key field.
+		Name:       analysisRunName,
 		UID:        types.UID(analysisRunUID),
 	}}
 }
@@ -112,7 +114,7 @@ func buildTestRun(cfg *provider.PluginConfig, scriptCMName, scriptKey, namespace
 				labelManagedBy: managedByValue,
 				labelRollout:   cfg.RolloutName,
 			},
-			OwnerReferences: analysisRunOwnerRef(cfg.AnalysisRunUID),
+			OwnerReferences: analysisRunOwnerRef(cfg.AnalysisRunName, cfg.AnalysisRunUID),
 		},
 		Spec: k6v1alpha1.TestRunSpec{
 			Script: k6v1alpha1.K6Script{
@@ -154,7 +156,7 @@ func buildPrivateLoadZone(cfg *provider.PluginConfig, namespace, crName string) 
 				labelManagedBy: managedByValue,
 				labelRollout:   cfg.RolloutName,
 			},
-			OwnerReferences: analysisRunOwnerRef(cfg.AnalysisRunUID),
+			OwnerReferences: analysisRunOwnerRef(cfg.AnalysisRunName, cfg.AnalysisRunUID),
 		},
 		Spec: k6v1alpha1.PrivateLoadZoneSpec{
 			Token: cfg.APIToken,

@@ -292,6 +292,7 @@ func TestTriggerRun_WithAnalysisRunUID(t *testing.T) {
 	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
 
 	cfg := defaultOperatorConfig()
+	cfg.AnalysisRunName = "my-app-analysis-run-1"
 	cfg.AnalysisRunUID = "uid-abc-123"
 
 	runID, err := p.TriggerRun(context.Background(), cfg)
@@ -311,6 +312,7 @@ func TestTriggerRun_WithAnalysisRunUID(t *testing.T) {
 	require.Len(t, ownerRefs, 1)
 	assert.Equal(t, "argoproj.io/v1alpha1", ownerRefs[0].APIVersion)
 	assert.Equal(t, "AnalysisRun", ownerRefs[0].Kind)
+	assert.Equal(t, "my-app-analysis-run-1", ownerRefs[0].Name, "OwnerReference Name must be populated")
 	assert.Equal(t, "uid-abc-123", string(ownerRefs[0].UID))
 }
 

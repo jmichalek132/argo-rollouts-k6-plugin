@@ -164,8 +164,9 @@ func TestBuildTestRun_Cleanup(t *testing.T) {
 
 func TestBuildTestRun_OwnerRef_WithUID(t *testing.T) {
 	cfg := &provider.PluginConfig{
-		RolloutName:    "my-app",
-		AnalysisRunUID: "abc-123",
+		RolloutName:     "my-app",
+		AnalysisRunName: "my-app-analysis-1",
+		AnalysisRunUID:  "abc-123",
 	}
 	tr := buildTestRun(cfg, "cm", "test.js", "ns", "k6-test")
 
@@ -173,6 +174,7 @@ func TestBuildTestRun_OwnerRef_WithUID(t *testing.T) {
 	ref := tr.OwnerReferences[0]
 	assert.Equal(t, "argoproj.io/v1alpha1", ref.APIVersion)
 	assert.Equal(t, "AnalysisRun", ref.Kind)
+	assert.Equal(t, "my-app-analysis-1", ref.Name, "OwnerReference Name must be set for K8s API validation")
 	assert.Equal(t, "abc-123", string(ref.UID))
 }
 
@@ -210,14 +212,16 @@ func TestBuildPrivateLoadZone_CloudFields(t *testing.T) {
 
 func TestBuildPrivateLoadZone_OwnerRef(t *testing.T) {
 	cfg := &provider.PluginConfig{
-		RolloutName:    "my-app",
-		AnalysisRunUID: "uid-999",
-		APIToken:       "token",
-		StackID:        "stack",
+		RolloutName:     "my-app",
+		AnalysisRunName: "my-app-plz-analysis",
+		AnalysisRunUID:  "uid-999",
+		APIToken:        "token",
+		StackID:         "stack",
 	}
 	plz := buildPrivateLoadZone(cfg, "ns", "k6-plz-test")
 
 	require.Len(t, plz.OwnerReferences, 1, "should set OwnerReferences when AnalysisRunUID provided (per D-09)")
+	assert.Equal(t, "my-app-plz-analysis", plz.OwnerReferences[0].Name, "OwnerReference Name must be set")
 	assert.Equal(t, "uid-999", string(plz.OwnerReferences[0].UID))
 }
 
