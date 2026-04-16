@@ -70,7 +70,7 @@ Plans:
   5. Created TestRun CRs use consistent naming (`k6-<rollout>-<hash>`) and carry `app.kubernetes.io/managed-by` labels
 **Plans:** 2 plans
 Plans:
-- [ ] 08-01-PLAN.md -- k6-operator dep, PluginConfig extension, TestRun CR construction helpers, exit code mapping
+- [x] 08-01-PLAN.md -- k6-operator dep, PluginConfig extension, TestRun CR construction helpers, exit code mapping
 - [ ] 08-02-PLAN.md -- TriggerRun/GetRunResult/StopRun implementation with dynamic client
 
 ### Phase 9: Metric Integration
