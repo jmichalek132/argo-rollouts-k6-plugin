@@ -180,6 +180,11 @@ func (p *K6OperatorProvider) TriggerRun(ctx context.Context, cfg *provider.Plugi
 	}
 
 	// 2. Read script from ConfigMap (proves ConfigMap exists).
+	// NOTE: This is a best-effort pre-flight check (TOCTOU). The k6-operator
+	// independently reads the ConfigMap when processing the CR. This check provides
+	// an early, user-facing error message if the ConfigMap is missing or malformed,
+	// but cannot prevent races where the ConfigMap is deleted between this check
+	// and the operator's read.
 	_, err := p.readScript(ctx, cfg)
 	if err != nil {
 		return "", err
