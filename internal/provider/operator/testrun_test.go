@@ -265,6 +265,37 @@ func TestIsCloudConnected_False_NoStackID(t *testing.T) {
 	assert.False(t, isCloudConnected(cfg))
 }
 
+// --- sanitizeLabelValue ---
+
+func TestSanitizeLabelValue_Short(t *testing.T) {
+	assert.Equal(t, "my-app", sanitizeLabelValue("my-app"))
+}
+
+func TestSanitizeLabelValue_Empty(t *testing.T) {
+	assert.Equal(t, "", sanitizeLabelValue(""))
+}
+
+func TestSanitizeLabelValue_TruncatesAt63(t *testing.T) {
+	long := strings.Repeat("a", 100)
+	result := sanitizeLabelValue(long)
+	assert.Equal(t, 63, len(result))
+}
+
+func TestSanitizeLabelValue_TrimsTrailingSpecialChars(t *testing.T) {
+	// If truncation lands on a dot/dash/underscore, trim them.
+	input := strings.Repeat("a", 60) + "---bbb"
+	result := sanitizeLabelValue(input)
+	assert.LessOrEqual(t, len(result), 63)
+	assert.NotRegexp(t, `[._-]$`, result, "must not end with dot, dash, or underscore")
+}
+
+func TestSanitizeLabelValue_TruncationCutsAtSpecialChar(t *testing.T) {
+	// 63 chars where position 62 (last) is a dash -> should be trimmed.
+	input := strings.Repeat("a", 62) + "-"
+	result := sanitizeLabelValue(input)
+	assert.Equal(t, 62, len(result), "trailing dash after truncation should be trimmed")
+}
+
 // --- encodeRunID / decodeRunID ---
 
 func TestEncodeRunID(t *testing.T) {

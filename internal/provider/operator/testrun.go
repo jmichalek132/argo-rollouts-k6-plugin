@@ -34,6 +34,18 @@ const (
 	managedByValue = "argo-rollouts-k6-plugin"
 )
 
+// sanitizeLabelValue truncates and trims a string for use as a Kubernetes label value.
+// Label values must be at most 63 characters and, if non-empty, must start and end
+// with an alphanumeric character (RFC 1123 / Kubernetes validation rules).
+func sanitizeLabelValue(v string) string {
+	if len(v) > 63 {
+		v = v[:63]
+	}
+	// Trim trailing non-alphanumeric characters that may result from truncation.
+	v = strings.TrimRight(v, ".-_")
+	return v
+}
+
 // testRunName generates a deterministic CR name following the pattern k6-<rollout>-<hash>.
 // The hash input includes namespace to prevent cross-namespace name collisions
 // when rollout names are the same. The timestamp component ensures uniqueness
@@ -116,7 +128,7 @@ func buildTestRun(cfg *provider.PluginConfig, scriptCMName, scriptKey, namespace
 			Namespace: namespace,
 			Labels: map[string]string{
 				labelManagedBy: managedByValue,
-				labelRollout:   cfg.RolloutName,
+				labelRollout:   sanitizeLabelValue(cfg.RolloutName),
 			},
 			OwnerReferences: analysisRunOwnerRef(cfg.AnalysisRunName, cfg.AnalysisRunUID),
 		},
@@ -158,7 +170,7 @@ func buildPrivateLoadZone(cfg *provider.PluginConfig, namespace, crName string) 
 			Namespace: namespace,
 			Labels: map[string]string{
 				labelManagedBy: managedByValue,
-				labelRollout:   cfg.RolloutName,
+				labelRollout:   sanitizeLabelValue(cfg.RolloutName),
 			},
 			OwnerReferences: analysisRunOwnerRef(cfg.AnalysisRunName, cfg.AnalysisRunUID),
 		},
