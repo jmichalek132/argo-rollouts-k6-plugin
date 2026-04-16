@@ -71,7 +71,7 @@ Plans:
 **Plans:** 2 plans
 Plans:
 - [x] 08-01-PLAN.md -- k6-operator dep, PluginConfig extension, TestRun CR construction helpers, exit code mapping
-- [ ] 08-02-PLAN.md -- TriggerRun/GetRunResult/StopRun implementation with dynamic client
+- [x] 08-02-PLAN.md -- TriggerRun/GetRunResult/StopRun implementation with dynamic client
 
 ### Phase 9: Metric Integration
 **Goal**: Metric plugin extracts k6 result metrics from in-cluster test runs for AnalysisTemplate successCondition evaluation
