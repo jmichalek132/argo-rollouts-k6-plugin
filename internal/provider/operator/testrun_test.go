@@ -40,6 +40,11 @@ func TestTestRunName_MaxLength(t *testing.T) {
 	longName := strings.Repeat("a", 250)
 	name := testRunName(longName, "default")
 	assert.LessOrEqual(t, len(name), 253, "CR name must be <= 253 chars")
+
+	// Verify the 8-char hash suffix is preserved even with long rollout names.
+	// The name format is "k6-<rollout>-<8hex>", so the last 8 chars must be hex.
+	re := regexp.MustCompile(`-[0-9a-f]{8}$`)
+	assert.Regexp(t, re, name, "hash suffix must be fully preserved after truncation")
 }
 
 func TestTestRunName_HashIncludesNamespace(t *testing.T) {

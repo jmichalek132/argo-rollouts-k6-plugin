@@ -41,12 +41,16 @@ const (
 func testRunName(rolloutName, namespace string) string {
 	h := sha256.Sum256([]byte(fmt.Sprintf("%s/%s/%d", namespace, rolloutName, time.Now().UnixNano())))
 	short := fmt.Sprintf("%x", h[:4]) // 8 hex chars
-	name := fmt.Sprintf("k6-%s-%s", rolloutName, short)
-	// Kubernetes name max is 253 chars; truncate if needed.
-	if len(name) > 253 {
-		name = name[:253]
+
+	// Reserve space for "k6-" prefix (3) + "-" separator (1) + hash (8) = 12 chars.
+	// Truncate the rollout name component to ensure the hash suffix is always
+	// fully present, preserving uniqueness guarantees.
+	const maxRolloutLen = 253 - 12
+	if len(rolloutName) > maxRolloutLen {
+		rolloutName = rolloutName[:maxRolloutLen]
 	}
-	return name
+
+	return fmt.Sprintf("k6-%s-%s", rolloutName, short)
 }
 
 // analysisRunOwnerRef creates an OwnerReference for the AnalysisRun (per D-09).
