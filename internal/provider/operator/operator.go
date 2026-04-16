@@ -27,6 +27,7 @@ type K6OperatorProvider struct {
 	client     kubernetes.Interface
 	dynClient  dynamic.Interface
 	clientErr  error
+	logReader  PodLogReader // injectable for testing; nil = use k8sPodLogReader
 }
 
 // Option configures a K6OperatorProvider.
@@ -48,6 +49,14 @@ func WithClient(c kubernetes.Interface) Option {
 func WithDynClient(c dynamic.Interface) Option {
 	return func(p *K6OperatorProvider) {
 		p.dynClient = c
+	}
+}
+
+// WithLogReader injects a PodLogReader for testing.
+// Production code uses k8sPodLogReader created from the Kubernetes client.
+func WithLogReader(r PodLogReader) Option {
+	return func(p *K6OperatorProvider) {
+		p.logReader = r
 	}
 }
 
@@ -102,6 +111,15 @@ func (p *K6OperatorProvider) ensureClient() (kubernetes.Interface, dynamic.Inter
 		}
 	})
 	return p.client, p.dynClient, p.clientErr
+}
+
+// ensureLogReader returns the PodLogReader, creating a k8sPodLogReader from the
+// Kubernetes client if none was injected via WithLogReader.
+func (p *K6OperatorProvider) ensureLogReader(client kubernetes.Interface) PodLogReader {
+	if p.logReader != nil {
+		return p.logReader
+	}
+	return &k8sPodLogReader{client: client}
 }
 
 // readScript reads a k6 script from a Kubernetes ConfigMap (per D-08, D-10).
@@ -321,6 +339,39 @@ func (p *K6OperatorProvider) GetRunResult(ctx context.Context, cfg *provider.Plu
 		State:            state,
 		ThresholdsPassed: state == provider.Passed,
 	}
+
+	// Populate detailed metrics from handleSummary for terminal states (METR-01).
+	// Mirrors cloud.go populateAggregateMetrics pattern: failures log Warn, return zero metrics.
+	//
+	// Only Passed and Failed states trigger summary parsing. Other terminal states
+	// (Errored, Aborted) skip this because:
+	// - Errored: k6 crashed or infra issue, handleSummary may not have run
+	// - Aborted: run was stopped, no complete metrics available
+	//
+	// Threshold pass/fail is determined by exit codes (Phase 8), NOT by handleSummary
+	// threshold data. handleSummary provides supplementary detailed metrics only.
+	// Graceful degradation per D-05: failures log Warn with structured fields,
+	// result retains zero-value metrics (distinguishable from real zeros only via
+	// the slog warning -- acceptable because zero http_reqs means "no data").
+	if state == provider.Passed || state == provider.Failed {
+		logReader := p.ensureLogReader(client)
+		metrics, err := parseSummaryFromPods(ctx, logReader, client, ns, name)
+		if err != nil {
+			slog.Warn("failed to parse handleSummary from pod logs, detailed metrics unavailable",
+				"name", name,
+				"namespace", ns,
+				"error", err,
+				"provider", p.Name(),
+				"affectedMetrics", "http_req_failed,http_req_duration,http_reqs",
+			)
+			// result keeps zero-value metrics -- graceful degradation per D-05
+		} else {
+			result.HTTPReqFailed = metrics.HTTPReqFailed
+			result.HTTPReqDuration = metrics.HTTPReqDuration
+			result.HTTPReqs = metrics.HTTPReqs
+		}
+	}
+
 	return result, nil
 }
 
