@@ -23,9 +23,13 @@ type PodLogReader interface {
 }
 
 // k8sPodLogReader implements PodLogReader using the real Kubernetes client.
+// Used by K6OperatorProvider when wired into GetRunResult (plan 09-02).
 type k8sPodLogReader struct {
 	client kubernetes.Interface
 }
+
+// Compile-time interface check.
+var _ PodLogReader = (*k8sPodLogReader)(nil)
 
 func (r *k8sPodLogReader) ReadLogs(ctx context.Context, namespace, podName string, opts *corev1.PodLogOptions) (string, error) {
 	req := r.client.CoreV1().Pods(namespace).GetLogs(podName, opts)
@@ -33,7 +37,7 @@ func (r *k8sPodLogReader) ReadLogs(ctx context.Context, namespace, podName strin
 	if err != nil {
 		return "", fmt.Errorf("stream logs for pod %s/%s: %w", namespace, podName, err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	buf, err := io.ReadAll(stream)
 	if err != nil {
 		return "", fmt.Errorf("read logs for pod %s/%s: %w", namespace, podName, err)
