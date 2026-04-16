@@ -41,4 +41,5 @@ spec:
               name: "{{args.script-configmap}}"
               key: "{{args.script-key}}"
             namespace: "{{args.namespace}}"
+            runnerImage: "grafana/k6:0.56.0"
             metric: thresholds

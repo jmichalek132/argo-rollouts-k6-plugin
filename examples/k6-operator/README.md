@@ -124,6 +124,7 @@ k6 step / analysis gate executes.
 - RBAC includes PrivateLoadZone CRD permissions for forward compatibility
   with Grafana Cloud-connected in-cluster execution. Current in-cluster-only
   code paths do not create PrivateLoadZone CRs.
-- The k6 runner image defaults to `grafana/k6:latest`. For production, pin a
-  specific version by setting the `runnerImage` config field in your plugin
-  config (for example `runnerImage: grafana/k6:1.0.0`).
+- These examples pin `runnerImage: grafana/k6:0.56.0`; update to a newer tag
+  as needed. Avoid `grafana/k6:latest` -- it is non-deterministic across
+  runs and will pull a different image whenever the tag is republished.
+  Pinning is strongly recommended for production.

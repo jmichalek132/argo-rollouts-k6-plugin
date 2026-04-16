@@ -42,5 +42,6 @@ spec:
               configMapRef:
                 name: k6-load-test
                 key: test.js
+              runnerImage: "grafana/k6:0.56.0"
               timeout: "5m"
         - setWeight: 100
