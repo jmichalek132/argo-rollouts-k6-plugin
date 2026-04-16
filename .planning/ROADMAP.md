@@ -82,7 +82,7 @@ Plans:
   2. Metric plugin works with k6-operator provider using the same successCondition expressions as the Grafana Cloud provider (users switch providers without rewriting AnalysisTemplates)
 **Plans:** 2 plans
 Plans:
-- [ ] 09-01-PLAN.md -- handleSummary JSON parsing engine (summary.go) with PodLogReader, metric extraction, multi-pod aggregation
+- [x] 09-01-PLAN.md -- handleSummary JSON parsing engine (summary.go) with PodLogReader, metric extraction, multi-pod aggregation
 - [ ] 09-02-PLAN.md -- Wire parseSummaryFromPods into GetRunResult with WithLogReader option
 
 ### Phase 10: Documentation & E2E
