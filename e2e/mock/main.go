@@ -119,6 +119,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// GET /health or GET / — simple endpoint for k6 runner pods to target during load tests.
+	// k6-operator e2e tests point the k6 script's TARGET_URL at this endpoint.
+	if r.Method == http.MethodGet && (path == "/health" || path == "/") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		return
+	}
+
 	log.Printf("404: %s %s", r.Method, path)
 	http.NotFound(w, r)
 }

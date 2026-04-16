@@ -36,6 +36,9 @@ func TestMain(m *testing.M) {
 		envfuncs.CreateCluster(kind.NewProvider(), kindClusterName),
 		envfuncs.CreateNamespace(namespace),
 		installArgoRollouts(),
+		installK6Operator(),
+		preloadK6Image(kindClusterName),
+		applyK6PluginRBAC(),
 		setupFn,
 	)
 	testenv.Finish(
@@ -66,6 +69,107 @@ func installArgoRollouts() env.Func {
 		}
 
 		log.Println("Argo Rollouts installed successfully")
+		return ctx, nil
+	}
+}
+
+// installK6Operator installs the k6-operator CRDs and controller into the cluster.
+// Waits for both CRD establishment and controller readiness.
+func installK6Operator() env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		log.Println("Installing k6-operator...")
+
+		if err := runKubectl(cfg, "apply", "--server-side", "-f",
+			"https://raw.githubusercontent.com/grafana/k6-operator/v1.3.2/bundle.yaml"); err != nil {
+			return ctx, fmt.Errorf("install k6-operator: %w", err)
+		}
+
+		// Wait for CRDs to be established before any CR creation.
+		// Addresses review concern: controller readiness alone is insufficient.
+		if err := runKubectl(cfg, "wait", "--for=condition=Established",
+			"crd/testruns.k6.io", "crd/privateloadzones.k6.io",
+			"--timeout=60s"); err != nil {
+			return ctx, fmt.Errorf("wait for k6-operator CRDs: %w", err)
+		}
+
+		if err := runKubectl(cfg, "rollout", "status", "deployment/k6-operator-controller-manager",
+			"-n", "k6-operator-system", "--timeout=120s"); err != nil {
+			return ctx, fmt.Errorf("wait for k6-operator controller: %w", err)
+		}
+
+		log.Println("k6-operator installed successfully")
+		return ctx, nil
+	}
+}
+
+// k6RunnerImage is the pinned k6 runner image used in e2e tests.
+// Pinned for reproducibility -- grafana/k6:latest is non-deterministic.
+const k6RunnerImage = "grafana/k6:0.56.0"
+
+// preloadK6Image pulls the pinned k6 runner image and loads it into the kind cluster
+// to avoid Docker Hub rate limits during k6-operator TestRun execution.
+func preloadK6Image(clusterName string) env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		log.Printf("Pre-loading %s into kind...", k6RunnerImage)
+
+		if out, err := exec.Command("docker", "pull", k6RunnerImage).CombinedOutput(); err != nil {
+			log.Printf("Warning: failed to pull %s (may already be cached): %s", k6RunnerImage, string(out))
+			// Non-fatal: image might already be present locally
+		}
+
+		if out, err := exec.Command("kind", "load", "docker-image", k6RunnerImage,
+			"--name", clusterName).CombinedOutput(); err != nil {
+			return ctx, fmt.Errorf("kind load %s: %w\n%s", k6RunnerImage, err, string(out))
+		}
+
+		log.Printf("%s loaded into kind", k6RunnerImage)
+		return ctx, nil
+	}
+}
+
+// applyK6PluginRBAC creates the ClusterRole and ClusterRoleBinding that grants the
+// argo-rollouts controller ServiceAccount permissions to manage k6-operator CRDs,
+// read pods/logs, and read ConfigMaps. Without this, k6-operator e2e tests hit 403.
+func applyK6PluginRBAC() env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		log.Println("Applying k6 plugin RBAC...")
+
+		const rbacYAML = `apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-rollouts-k6-plugin
+rules:
+  - apiGroups: ["k6.io"]
+    resources: ["testruns", "privateloadzones"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-rollouts-k6-plugin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-rollouts-k6-plugin
+subjects:
+  - kind: ServiceAccount
+    name: argo-rollouts
+    namespace: argo-rollouts`
+
+		if err := kubectlApplyStdin(cfg, rbacYAML); err != nil {
+			return ctx, fmt.Errorf("apply k6 plugin RBAC: %w", err)
+		}
+
+		log.Println("k6 plugin RBAC applied")
 		return ctx, nil
 	}
 }
