@@ -17,6 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testCRName is a fixed CR name for tests that use pre-created unstructured objects.
+const testCRName = "k6-my-app-abc12345"
+
 func defaultOperatorConfig() *provider.PluginConfig {
 	return &provider.PluginConfig{
 		Provider: "k6-operator",
@@ -372,13 +375,13 @@ func TestTriggerRun_ConfigMapNotFound(t *testing.T) {
 // --- GetRunResult tests ---
 
 func TestGetRunResult_StageStarted(t *testing.T) {
-	tr := fakeUnstructuredTestRun("test-ns", "k6-my-app-abc12345", "started")
+	tr := fakeUnstructuredTestRun("test-ns", testCRName, "started")
 	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
 	fakeClient := k8sfake.NewSimpleClientset()
 	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
 
 	cfg := defaultOperatorConfig()
-	runID := encodeRunID("test-ns", "testruns", "k6-my-app-abc12345")
+	runID := encodeRunID("test-ns", "testruns", testCRName)
 
 	result, err := p.GetRunResult(context.Background(), cfg, runID)
 	require.NoError(t, err)
@@ -386,7 +389,7 @@ func TestGetRunResult_StageStarted(t *testing.T) {
 }
 
 func TestGetRunResult_StageFinished_AllPassed(t *testing.T) {
-	crName := "k6-my-app-abc12345"
+	crName := testCRName
 	tr := fakeUnstructuredTestRun("test-ns", crName, "finished")
 	pod := testRunnerPod("test-ns", crName, 0) // exit code 0 = passed
 	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
@@ -403,7 +406,7 @@ func TestGetRunResult_StageFinished_AllPassed(t *testing.T) {
 }
 
 func TestGetRunResult_StageFinished_ThresholdsFailed(t *testing.T) {
-	crName := "k6-my-app-abc12345"
+	crName := testCRName
 	tr := fakeUnstructuredTestRun("test-ns", crName, "finished")
 	pod := testRunnerPod("test-ns", crName, 99) // exit code 99 = thresholds failed
 	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
@@ -420,7 +423,7 @@ func TestGetRunResult_StageFinished_ThresholdsFailed(t *testing.T) {
 }
 
 func TestGetRunResult_StageError(t *testing.T) {
-	crName := "k6-my-app-abc12345"
+	crName := testCRName
 	tr := fakeUnstructuredTestRun("test-ns", crName, "error")
 	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
 	fakeClient := k8sfake.NewSimpleClientset()
@@ -450,7 +453,7 @@ func TestGetRunResult_NotFound(t *testing.T) {
 
 func TestGetRunResult_AbsentStage(t *testing.T) {
 	// TestRun with no status.stage field at all (freshly created).
-	crName := "k6-my-app-abc12345"
+	crName := testCRName
 	tr := fakeUnstructuredTestRun("test-ns", crName, "") // empty = no stage field
 	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
 	fakeClient := k8sfake.NewSimpleClientset()
@@ -465,7 +468,7 @@ func TestGetRunResult_AbsentStage(t *testing.T) {
 }
 
 func TestGetRunResult_PodsStillRunning(t *testing.T) {
-	crName := "k6-my-app-abc12345"
+	crName := testCRName
 	tr := fakeUnstructuredTestRun("test-ns", crName, "finished")
 	pod := testRunningPod("test-ns", crName) // pod not yet terminated
 	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
@@ -494,7 +497,7 @@ func TestGetRunResult_InvalidRunID(t *testing.T) {
 // --- StopRun tests ---
 
 func TestStopRun_DeletesTestRun(t *testing.T) {
-	crName := "k6-my-app-abc12345"
+	crName := testCRName
 	tr := fakeUnstructuredTestRun("test-ns", crName, "started")
 	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
 	fakeClient := k8sfake.NewSimpleClientset()
@@ -514,7 +517,7 @@ func TestStopRun_DeletesTestRun(t *testing.T) {
 }
 
 func TestStopRun_DeletesPrivateLoadZone(t *testing.T) {
-	crName := "k6-my-app-abc12345"
+	crName := testCRName
 	plz := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "k6.io/v1alpha1",

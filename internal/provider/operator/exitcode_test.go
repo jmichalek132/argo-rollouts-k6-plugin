@@ -141,13 +141,19 @@ func testRestartedPod(ns, testRunName string, exitCode int32, restartCount int32
 	}
 }
 
+// Pod name constants for multi-pod tests.
+const (
+	testPodRunner0 = "k6-myapp-abc-runner-0"
+	testPodRunner1 = "k6-myapp-abc-runner-1"
+)
+
 // --- checkRunnerExitCodes ---
 
 func TestCheckRunnerExitCodes_AllPassed(t *testing.T) {
 	pod1 := testRunnerPod("ns", "k6-myapp-abc", 0)
-	pod1.Name = "k6-myapp-abc-runner-0"
+	pod1.Name = testPodRunner0
 	pod2 := testRunnerPod("ns", "k6-myapp-abc", 0)
-	pod2.Name = "k6-myapp-abc-runner-1"
+	pod2.Name = testPodRunner1
 
 	client := fake.NewSimpleClientset(pod1, pod2)
 	state, err := checkRunnerExitCodes(context.Background(), client, "ns", "k6-myapp-abc")
@@ -157,9 +163,9 @@ func TestCheckRunnerExitCodes_AllPassed(t *testing.T) {
 
 func TestCheckRunnerExitCodes_OneFailed(t *testing.T) {
 	pod1 := testRunnerPod("ns", "k6-myapp-abc", 0)
-	pod1.Name = "k6-myapp-abc-runner-0"
+	pod1.Name = testPodRunner0
 	pod2 := testRunnerPod("ns", "k6-myapp-abc", 99)
-	pod2.Name = "k6-myapp-abc-runner-1"
+	pod2.Name = testPodRunner1
 
 	client := fake.NewSimpleClientset(pod1, pod2)
 	state, err := checkRunnerExitCodes(context.Background(), client, "ns", "k6-myapp-abc")
@@ -169,9 +175,9 @@ func TestCheckRunnerExitCodes_OneFailed(t *testing.T) {
 
 func TestCheckRunnerExitCodes_OneErrored(t *testing.T) {
 	pod1 := testRunnerPod("ns", "k6-myapp-abc", 0)
-	pod1.Name = "k6-myapp-abc-runner-0"
+	pod1.Name = testPodRunner0
 	pod2 := testRunnerPod("ns", "k6-myapp-abc", 107)
-	pod2.Name = "k6-myapp-abc-runner-1"
+	pod2.Name = testPodRunner1
 
 	client := fake.NewSimpleClientset(pod1, pod2)
 	state, err := checkRunnerExitCodes(context.Background(), client, "ns", "k6-myapp-abc")
@@ -189,7 +195,7 @@ func TestCheckRunnerExitCodes_NoPods(t *testing.T) {
 
 func TestCheckRunnerExitCodes_PodStillRunning(t *testing.T) {
 	pod1 := testRunnerPod("ns", "k6-myapp-abc", 0)
-	pod1.Name = "k6-myapp-abc-runner-0"
+	pod1.Name = testPodRunner0
 	pod2 := testRunningPod("ns", "k6-myapp-abc")
 
 	client := fake.NewSimpleClientset(pod1, pod2)

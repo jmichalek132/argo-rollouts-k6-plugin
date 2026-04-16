@@ -6,7 +6,10 @@ import (
 	"log/slog"
 	"sync"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -162,32 +165,199 @@ func (p *K6OperatorProvider) Validate(cfg *provider.PluginConfig) error {
 	return cfg.ValidateK6Operator()
 }
 
-// TriggerRun validates config and reads the k6 script (Phase 7 stub).
-// Phase 8 will replace this with real TestRun CR creation.
+// TriggerRun creates a k6-operator TestRun or PrivateLoadZone CR via dynamic client.
+// Returns an encoded run ID containing namespace/resource/name for lifecycle identity.
+//
+// Validation runs BEFORE readScript (addresses MEDIUM review concern about validation
+// ordering -- no I/O wasted on invalid config).
+//
+// Auto-detects PrivateLoadZone when Grafana Cloud credentials are present (per D-02).
+// Sets OwnerReferences when cfg.AnalysisRunUID is non-empty (per D-09).
 func (p *K6OperatorProvider) TriggerRun(ctx context.Context, cfg *provider.PluginConfig) (string, error) {
+	// 1. Validate config FIRST -- before any I/O (addresses review concern: validation ordering).
 	if err := cfg.ValidateK6Operator(); err != nil {
 		return "", err
 	}
-	script, err := p.readScript(ctx, cfg)
+
+	// 2. Read script from ConfigMap (proves ConfigMap exists).
+	_, err := p.readScript(ctx, cfg)
 	if err != nil {
 		return "", err
 	}
-	slog.Info("k6 script ready for execution",
-		"configmap", cfg.ConfigMapRef.Name,
-		"key", cfg.ConfigMapRef.Key,
-		"scriptLen", len(script),
+
+	// 3. Get clients.
+	_, dynClient, err := p.ensureClient()
+	if err != nil {
+		return "", err
+	}
+
+	// 4. Resolve namespace.
+	ns := cfg.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+
+	// 5. Generate CR name using cfg.RolloutName.
+	rolloutName := cfg.RolloutName
+	if rolloutName == "" {
+		rolloutName = "unknown"
+	}
+	crName := testRunName(rolloutName, ns)
+
+	// 6. Build and create CR (auto-detect TestRun vs PrivateLoadZone per D-02).
+	// Owner references are set inside buildTestRun/buildPrivateLoadZone
+	// using cfg.AnalysisRunUID (per D-09). If UID is empty, no owner ref is set.
+	if isCloudConnected(cfg) {
+		plz := buildPrivateLoadZone(cfg, ns, crName)
+		obj, convErr := runtime.DefaultUnstructuredConverter.ToUnstructured(plz)
+		if convErr != nil {
+			return "", fmt.Errorf("convert PrivateLoadZone to unstructured: %w", convErr)
+		}
+		u := &unstructured.Unstructured{Object: obj}
+		created, createErr := dynClient.Resource(plzGVR).Namespace(ns).Create(ctx, u, metav1.CreateOptions{})
+		if createErr != nil {
+			return "", fmt.Errorf("create PrivateLoadZone %s/%s: %w", ns, crName, createErr)
+		}
+		slog.Info("k6 PrivateLoadZone created",
+			"name", created.GetName(),
+			"namespace", ns,
+			"provider", p.Name(),
+		)
+		// Encode full lifecycle identity: namespace + resource + name.
+		// Addresses HIGH review concern: GetRunResult/StopRun recover GVR from runID.
+		return encodeRunID(ns, "privateloadzones", created.GetName()), nil
+	}
+
+	tr := buildTestRun(cfg, cfg.ConfigMapRef.Name, cfg.ConfigMapRef.Key, ns, crName)
+	obj, convErr := runtime.DefaultUnstructuredConverter.ToUnstructured(tr)
+	if convErr != nil {
+		return "", fmt.Errorf("convert TestRun to unstructured: %w", convErr)
+	}
+	u := &unstructured.Unstructured{Object: obj}
+	created, createErr := dynClient.Resource(testRunGVR).Namespace(ns).Create(ctx, u, metav1.CreateOptions{})
+	if createErr != nil {
+		return "", fmt.Errorf("create TestRun %s/%s: %w", ns, crName, createErr)
+	}
+	slog.Info("k6 TestRun created",
+		"name", created.GetName(),
+		"namespace", ns,
 		"provider", p.Name(),
 	)
-	// Phase 8 will: createTestRun(ctx, client, cfg, script) -> runID
-	return "", fmt.Errorf("k6-operator provider not yet implemented (Phase 8)")
+	// Encode full lifecycle identity: namespace + resource + name.
+	return encodeRunID(ns, "testruns", created.GetName()), nil
 }
 
-// GetRunResult is a Phase 7 stub. Phase 8 will implement TestRun status polling.
+// GetRunResult polls the TestRun CR status and determines pass/fail from runner pods.
+//
+// Decodes runID to recover namespace, GVR, and CR name (addresses HIGH review concern
+// about lifecycle identity -- no re-derivation from config).
+//
+// Handles: missing CR (NotFound), absent stage field (freshly created CR returns Running),
+// and Pitfall 2 (pods not yet terminated returns Running).
 func (p *K6OperatorProvider) GetRunResult(ctx context.Context, cfg *provider.PluginConfig, runID string) (*provider.RunResult, error) {
-	return nil, fmt.Errorf("k6-operator provider not yet implemented (Phase 8)")
+	// Decode lifecycle identity from runID (addresses HIGH review concern).
+	ns, resource, name, err := decodeRunID(runID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid run ID: %w", err)
+	}
+	gvr := gvrForResource(resource)
+
+	client, dynClient, err := p.ensureClient()
+	if err != nil {
+		return nil, err
+	}
+
+	// Single GET per D-04 (no polling loop).
+	// Addresses MEDIUM review concern: NotFound/missing CR returns wrapped error.
+	u, err := dynClient.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get %s %s/%s: %w", resource, ns, name, err)
+	}
+
+	// Extract stage from status.
+	// Addresses MEDIUM review concern: absent stage field returns empty string
+	// which stageToRunState maps to Running (keep polling until operator sets stage).
+	stage, _, _ := unstructured.NestedString(u.Object, "status", "stage")
+	// NOTE: error from NestedString is intentionally ignored.
+	// If status.stage is missing (freshly created CR) or malformed,
+	// stage will be "" which stageToRunState maps to Running.
+	// This is correct behavior: keep polling until operator populates the field.
+
+	// Map stage to RunState.
+	state := stageToRunState(stage)
+
+	slog.Debug("TestRun status polled",
+		"name", name,
+		"namespace", ns,
+		"stage", stage,
+		"state", state,
+		"resource", resource,
+		"provider", p.Name(),
+	)
+
+	// For terminal stages, check runner pod exit codes (per D-05, issue #577 workaround).
+	if stage == "finished" {
+		exitState, exitErr := checkRunnerExitCodes(ctx, client, ns, name)
+		if exitErr != nil {
+			slog.Warn("failed to check runner exit codes, treating as error",
+				"name", name,
+				"namespace", ns,
+				"error", exitErr,
+				"provider", p.Name(),
+			)
+			return &provider.RunResult{
+				State: provider.Errored,
+			}, nil
+		}
+		state = exitState
+	}
+
+	result := &provider.RunResult{
+		State:            state,
+		ThresholdsPassed: state == provider.Passed,
+	}
+	return result, nil
 }
 
-// StopRun is a Phase 7 stub. Phase 8 will implement TestRun deletion.
+// StopRun deletes the TestRun or PrivateLoadZone CR via dynamic client (per D-08).
+//
+// Decodes runID to recover namespace, GVR, and CR name (addresses HIGH review concern
+// about lifecycle identity). Treats NotFound as success for idempotent abort paths
+// (addresses HIGH review concern about idempotent delete).
 func (p *K6OperatorProvider) StopRun(ctx context.Context, cfg *provider.PluginConfig, runID string) error {
-	return fmt.Errorf("k6-operator provider not yet implemented (Phase 8)")
+	// Decode lifecycle identity from runID (addresses HIGH review concern).
+	ns, resource, name, err := decodeRunID(runID)
+	if err != nil {
+		return fmt.Errorf("invalid run ID: %w", err)
+	}
+	gvr := gvrForResource(resource)
+
+	_, dynClient, err := p.ensureClient()
+	if err != nil {
+		return err
+	}
+
+	// Delete the CR (per D-08).
+	// Addresses HIGH review concern: NotFound treated as success for idempotent abort paths.
+	err = dynClient.Resource(gvr).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			slog.Info("TestRun already deleted (idempotent)",
+				"name", name,
+				"namespace", ns,
+				"resource", resource,
+				"provider", p.Name(),
+			)
+			return nil
+		}
+		return fmt.Errorf("delete %s %s/%s: %w", resource, ns, name, err)
+	}
+
+	slog.Info("k6 TestRun deleted",
+		"name", name,
+		"namespace", ns,
+		"resource", resource,
+		"provider", p.Name(),
+	)
+	return nil
 }
