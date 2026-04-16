@@ -99,6 +99,11 @@ func decodeRunID(runID string) (namespace, resource, name string, err error) {
 	if resource != "testruns" && resource != "privateloadzones" {
 		return "", "", "", fmt.Errorf("invalid run ID %q: expected namespace/resource/name", runID)
 	}
+	// Kubernetes resource names cannot contain slashes. Reject malformed runIDs
+	// like "ns/testruns/name/extra" which SplitN(3) would accept as name="name/extra".
+	if strings.Contains(name, "/") {
+		return "", "", "", fmt.Errorf("invalid run ID %q: name component contains slash", runID)
+	}
 	return namespace, resource, name, nil
 }
 

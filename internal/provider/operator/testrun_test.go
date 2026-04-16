@@ -325,6 +325,12 @@ func TestDecodeRunID_InvalidResource(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid run ID")
 }
 
+func TestDecodeRunID_NameContainsSlash(t *testing.T) {
+	_, _, _, err := decodeRunID("ns/testruns/name/extra/stuff")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name component contains slash")
+}
+
 func TestDecodeRunID_PLZ(t *testing.T) {
 	ns, resource, name, err := decodeRunID("ns/privateloadzones/plz-name")
 	require.NoError(t, err)
