@@ -80,7 +80,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Metric plugin extracts p95, error rate, throughput, and threshold results from k6 handleSummary() JSON found in runner pod logs
   2. Metric plugin works with k6-operator provider using the same successCondition expressions as the Grafana Cloud provider (users switch providers without rewriting AnalysisTemplates)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 09-01-PLAN.md -- handleSummary JSON parsing engine (summary.go) with PodLogReader, metric extraction, multi-pod aggregation
+- [ ] 09-02-PLAN.md -- Wire parseSummaryFromPods into GetRunResult with WithLogReader option
 
 ### Phase 10: Documentation & E2E
 **Goal**: Users have working RBAC examples, complete AnalysisTemplate YAML, and the full k6-operator integration is validated end-to-end on a kind cluster
@@ -107,5 +110,5 @@ Phases execute in numeric order: 7 → 8 → 9 → 10
 | 6. Automated Dependency Management | v0.2.0 | 1/1 | Complete | 2026-04-15 |
 | 7. Foundation & Kubernetes Client | v0.3.0 | 0/2 | Not started | - |
 | 8. k6-operator Provider | v0.3.0 | 0/2 | Not started | - |
-| 9. Metric Integration | v0.3.0 | 0/0 | Not started | - |
+| 9. Metric Integration | v0.3.0 | 0/2 | Not started | - |
 | 10. Documentation & E2E | v0.3.0 | 0/0 | Not started | - |
