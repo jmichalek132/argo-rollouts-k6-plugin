@@ -108,6 +108,14 @@ const k6RunnerImage = "grafana/k6:0.56.0"
 
 // preloadK6Image pulls the pinned k6 runner image and loads it into the kind cluster
 // to avoid Docker Hub rate limits during k6-operator TestRun execution.
+//
+// Bypasses `kind load docker-image` / `kind load image-archive` because both invoke
+// `ctr images import --all-platforms --digests` inside the kind node. On colima
+// (macOS), colima's local layer cache only holds the host platform's blobs, so the
+// other platforms' manifest digests cannot be resolved and the import aborts with
+// `content digest <sha>: not found`. Instead: docker save → pipe tar via stdin to
+// `ctr images import --digests` (no --all-platforms) directly inside each kind node.
+// Works on Docker Desktop, colima, and standard CI runners.
 func preloadK6Image(clusterName string) env.Func {
 	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
 		log.Printf("Pre-loading %s into kind...", k6RunnerImage)
@@ -117,12 +125,42 @@ func preloadK6Image(clusterName string) env.Func {
 			// Non-fatal: image might already be present locally
 		}
 
-		if out, err := exec.Command("kind", "load", "docker-image", k6RunnerImage,
-			"--name", clusterName).CombinedOutput(); err != nil {
-			return ctx, fmt.Errorf("kind load %s: %w\n%s", k6RunnerImage, err, string(out))
+		tarPath := filepath.Join(os.TempDir(), "k6-runner-e2e.tar")
+		defer os.Remove(tarPath)
+		if out, err := exec.Command("docker", "save", "-o", tarPath, k6RunnerImage).CombinedOutput(); err != nil {
+			return ctx, fmt.Errorf("docker save %s: %w\n%s", k6RunnerImage, err, string(out))
 		}
 
-		log.Printf("%s loaded into kind", k6RunnerImage)
+		// Enumerate kind nodes so each one gets the image (single-node clusters = 1 iteration).
+		nodesOut, err := exec.Command("kind", "get", "nodes", "--name", clusterName).CombinedOutput()
+		if err != nil {
+			return ctx, fmt.Errorf("kind get nodes: %w\n%s", err, string(nodesOut))
+		}
+		nodes := strings.Fields(string(nodesOut))
+		if len(nodes) == 0 {
+			return ctx, fmt.Errorf("no kind nodes found for cluster %q", clusterName)
+		}
+
+		tar, err := os.Open(tarPath)
+		if err != nil {
+			return ctx, fmt.Errorf("open tar: %w", err)
+		}
+		defer tar.Close()
+
+		for _, node := range nodes {
+			if _, err := tar.Seek(0, 0); err != nil {
+				return ctx, fmt.Errorf("rewind tar: %w", err)
+			}
+			cmd := exec.Command("docker", "exec", "-i", node,
+				"ctr", "--namespace=k8s.io", "images", "import",
+				"--digests", "--snapshotter=overlayfs", "-")
+			cmd.Stdin = tar
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return ctx, fmt.Errorf("import into %s: %w\n%s", node, err, string(out))
+			}
+		}
+
+		log.Printf("%s loaded into kind (%d node(s))", k6RunnerImage, len(nodes))
 		return ctx, nil
 	}
 }
