@@ -344,6 +344,73 @@ func TestTriggerRun_WithoutAnalysisRunUID(t *testing.T) {
 	assert.Empty(t, ownerRefs)
 }
 
+func TestTriggerRun_WithRolloutUID(t *testing.T) {
+	cm := testConfigMap("test-ns", "k6-scripts", map[string]string{
+		"load-test.js": "export default function() {}",
+	})
+	fakeClient := k8sfake.NewSimpleClientset(cm)
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme())
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
+
+	cfg := defaultOperatorConfig()
+	// RolloutName "my-app" already set by defaultOperatorConfig
+	cfg.RolloutUID = "rollout-uid-777"
+	cfg.AnalysisRunUID = "" // explicit: no AR owner (step plugin path)
+	cfg.AnalysisRunName = ""
+
+	runID, err := p.TriggerRun(context.Background(), cfg)
+	require.NoError(t, err)
+
+	ns, _, name, decErr := decodeRunID(runID)
+	require.NoError(t, decErr)
+
+	created, getErr := fakeDyn.Resource(testRunGVR).Namespace(ns).Get(
+		context.Background(), name, metav1.GetOptions{},
+	)
+	require.NoError(t, getErr)
+
+	// Check OwnerReferences -- Rollout-owned branch (D-07 fallback path)
+	ownerRefs := created.GetOwnerReferences()
+	require.Len(t, ownerRefs, 1, "exactly one owner ref when only RolloutUID is set")
+	assert.Equal(t, "argoproj.io/v1alpha1", ownerRefs[0].APIVersion)
+	assert.Equal(t, "Rollout", ownerRefs[0].Kind)
+	assert.Equal(t, "my-app", ownerRefs[0].Name)
+	assert.Equal(t, "rollout-uid-777", string(ownerRefs[0].UID))
+}
+
+func TestTriggerRun_AnalysisRunUIDWinsOverRolloutUID(t *testing.T) {
+	cm := testConfigMap("test-ns", "k6-scripts", map[string]string{
+		"load-test.js": "export default function() {}",
+	})
+	fakeClient := k8sfake.NewSimpleClientset(cm)
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme())
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
+
+	cfg := defaultOperatorConfig()
+	// Both UIDs set -- AR must win (D-07 precedence)
+	cfg.RolloutUID = "rollout-uid-777"
+	cfg.AnalysisRunName = "my-app-analysis-1"
+	cfg.AnalysisRunUID = "ar-uid-abc"
+
+	runID, err := p.TriggerRun(context.Background(), cfg)
+	require.NoError(t, err)
+
+	ns, _, name, decErr := decodeRunID(runID)
+	require.NoError(t, decErr)
+
+	created, getErr := fakeDyn.Resource(testRunGVR).Namespace(ns).Get(
+		context.Background(), name, metav1.GetOptions{},
+	)
+	require.NoError(t, getErr)
+
+	// AR wins: exactly one owner ref, Kind=AnalysisRun, UID=ar-uid-abc
+	ownerRefs := created.GetOwnerReferences()
+	require.Len(t, ownerRefs, 1, "exactly one owner ref; AR wins over Rollout per D-07")
+	assert.Equal(t, "AnalysisRun", ownerRefs[0].Kind)
+	assert.Equal(t, "my-app-analysis-1", ownerRefs[0].Name)
+	assert.Equal(t, "ar-uid-abc", string(ownerRefs[0].UID))
+}
+
 func TestTriggerRun_ValidationBeforeIO(t *testing.T) {
 	// Config with missing configMapRef AND missing ConfigMap in fake clientset.
 	// Validation should fail BEFORE readScript is called (no I/O wasted on invalid config).
