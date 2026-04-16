@@ -145,10 +145,14 @@ See `examples/` for more patterns.
 | Full canary | [`examples/canary-full/`](examples/canary-full/) | Step plugin trigger + metric analysis gate |
 | k6-operator (in-cluster) | [`examples/k6-operator/`](examples/k6-operator/) | In-cluster k6 execution via k6-operator with RBAC and ConfigMap script |
 
-Each example directory contains:
+Cloud-mode examples (`threshold-gate`, `error-rate-latency`, `canary-full`) contain:
 - `analysistemplate.yaml` (or `rollout.yaml`) -- the main resource
 - `secret.yaml` -- credential Secret with placeholder values
 - `configmap-snippet.yaml` -- ConfigMap snippet to register the plugin(s)
+
+The `k6-operator` example runs in-cluster and ships with a ClusterRole,
+ClusterRoleBinding, and script ConfigMap instead of a credential Secret.
+See [`examples/k6-operator/README.md`](examples/k6-operator/README.md).
 
 ## Available Metrics
 
