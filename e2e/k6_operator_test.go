@@ -57,6 +57,13 @@ spec:
 				t.Fatalf("initial rollout did not become Healthy: %v", err)
 			}
 
+			// Clear any TestRun CRs that may have leaked from transient reconciles
+			// or prior test runs. This ensures the TestRun count asserted in Assess
+			// reflects ONLY the canary step triggered by the patch below -- proving
+			// the step plugin actually executed, not that a pre-existing TestRun
+			// happened to be lying around.
+			_ = runKubectl(cfg, "delete", "testruns", "--all", "-n", cfg.Namespace(), "--ignore-not-found")
+
 			// Trigger canary via annotation patch so the step plugin executes.
 			if err := runKubectl(cfg, "patch", "rollout", "k6-step-k6op-e2e",
 				"-n", cfg.Namespace(), "--type=merge",
