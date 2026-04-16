@@ -20,10 +20,10 @@ Rollouts automatically pass or roll back based on real load test results — no 
 
 ## Current State
 
-Shipped **v0.2.0** on 2026-04-15. Phase 8 complete — k6-operator provider fully functional with TestRun/PrivateLoadZone CRD lifecycle, distributed execution support, and exit code-based pass/fail determination.
+Shipped **v0.2.0** on 2026-04-15. Phase 9 complete — k6-operator metric integration: handleSummary JSON parsing extracts p95, error rate, throughput from in-cluster runner pod logs. Metric plugin's successCondition evaluation works identically for k6-operator and Grafana Cloud providers.
 
-- **Go LOC:** ~25,000+ across 100+ files
-- **Test coverage:** 85+ tests in operator package alone (85 pass with -race)
+- **Go LOC:** ~26,000+ across 100+ files
+- **Test coverage:** 110+ tests in operator package (all pass with -race)
 - **Binaries:** 8 platform variants (linux/darwin x amd64/arm64) via GoReleaser
 - **e2e:** 4 mock scenarios on kind cluster, CI verified passing
 - **Dependencies:** Renovate bot configured for Go modules and GitHub Actions; k6-operator v1.3.2 added
@@ -50,6 +50,7 @@ Shipped **v0.2.0** on 2026-04-15. Phase 8 complete — k6-operator provider full
 - [ ] ConfigMap script sourcing: k6 .js script stored in a Kubernetes ConfigMap, referenced by name/key in plugin config
 - [ ] In-cluster k6 Job execution: KubernetesJobProvider creates `batch/v1` Jobs with k6 container
 - [x] k6-operator CRD support: trigger `TestRun` CRs via grafana/k6-operator for distributed execution — Validated in Phase 8
+- [x] k6-operator metric extraction: handleSummary JSON parsing from runner pod logs, metric parity with Grafana Cloud provider — Validated in Phase 9
 - [ ] Local binary execution research: investigate running k6 as a subprocess of the plugin process
 
 ### Deferred
