@@ -10,6 +10,8 @@ import (
 	"github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/providertest"
@@ -48,6 +50,30 @@ func runningMeasurement(runID string) v1alpha1.Measurement {
 		Phase:    v1alpha1.AnalysisPhaseRunning,
 		Metadata: map[string]string{"runId": runID},
 	}
+}
+
+// testAR builds a minimal *v1alpha1.AnalysisRun fixture. When rolloutName != "",
+// an OwnerReference is attached with Kind=Rollout and Controller=true, mirroring
+// what the Argo Rollouts controller stamps via NewControllerRef (verified in
+// rollout/analysis.go:502). Pass rolloutName=="" to simulate a standalone AR.
+func testAR(name, ns, uid, rolloutName string) *v1alpha1.AnalysisRun {
+	ar := &v1alpha1.AnalysisRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			UID:       types.UID(uid),
+		},
+	}
+	if rolloutName != "" {
+		isController := true
+		ar.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: "argoproj.io/v1alpha1",
+			Kind:       "Rollout",
+			Name:       rolloutName,
+			Controller: &isController,
+		}}
+	}
+	return ar
 }
 
 // --- InitPlugin tests ---
@@ -136,6 +162,157 @@ func TestRun_ProviderTriggerRunError(t *testing.T) {
 	m := k.Run(nil, testMetric(defaultCfg()))
 	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
 	assert.Contains(t, m.Message, "api error")
+}
+
+// --- Run tests: AnalysisRun metadata plumbing (Phase 08.1 D-08) ---
+
+func TestRun_PopulatesCfgFromAnalysisRun(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+			gotCfg = cfg
+			return "run-1", nil
+		},
+	}
+	ar := testAR("ar-1", "ns-prod", "ar-uid-1", "my-app")
+	k := New(mock)
+	m := k.Run(ar, testMetric(defaultCfg()))
+
+	require.Equal(t, v1alpha1.AnalysisPhaseRunning, m.Phase)
+	require.NotNil(t, gotCfg, "TriggerRun should have been called")
+	assert.Equal(t, "ns-prod", gotCfg.Namespace, "cfg.Namespace should be populated from ar.Namespace (D-01)")
+	assert.Equal(t, "my-app", gotCfg.RolloutName, "cfg.RolloutName should be walked from OwnerReferences (D-03)")
+	assert.Equal(t, "ar-1", gotCfg.AnalysisRunName)
+	assert.Equal(t, "ar-uid-1", gotCfg.AnalysisRunUID)
+}
+
+func TestRun_StandaloneAnalysisRun(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+			gotCfg = cfg
+			return "run-1", nil
+		},
+	}
+	ar := testAR("ar-solo", "ns-prod", "ar-uid-solo", "") // no Rollout owner ref
+	k := New(mock)
+	m := k.Run(ar, testMetric(defaultCfg()))
+
+	require.Equal(t, v1alpha1.AnalysisPhaseRunning, m.Phase)
+	require.NotNil(t, gotCfg)
+	assert.Equal(t, "", gotCfg.RolloutName, "standalone AR must leave RolloutName empty (D-04)")
+	assert.Equal(t, "ns-prod", gotCfg.Namespace)
+	assert.Equal(t, "ar-solo", gotCfg.AnalysisRunName)
+	assert.Equal(t, "ar-uid-solo", gotCfg.AnalysisRunUID)
+}
+
+func TestRun_UserNamespaceWinsOverAR(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+			gotCfg = cfg
+			return "run-1", nil
+		},
+	}
+	// User specifies namespace in the plugin config; AR lives in a different namespace.
+	cfg := defaultCfg()
+	cfg["namespace"] = "user-override"
+	ar := testAR("ar-1", "ns-ar", "ar-uid-1", "my-app")
+	k := New(mock)
+	m := k.Run(ar, testMetric(cfg))
+
+	require.Equal(t, v1alpha1.AnalysisPhaseRunning, m.Phase)
+	require.NotNil(t, gotCfg)
+	assert.Equal(t, "user-override", gotCfg.Namespace, "user-supplied namespace must win over ar.Namespace (D-01)")
+	assert.Equal(t, "my-app", gotCfg.RolloutName, "RolloutName still populated even when user sets namespace")
+}
+
+// R3 (codex review): D-03 says "prefer the entry with Controller==true". When an AR
+// carries multiple Rollout owner refs -- e.g. a non-controller ref followed by the
+// controller ref -- the walk must select the controller entry, not the first match.
+func TestRun_PrefersControllerRolloutOwnerRef(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+			gotCfg = cfg
+			return "run-1", nil
+		},
+	}
+
+	// Build an AR with TWO Rollout owner refs; the first has Controller=nil (not
+	// the controller), the second has Controller=&true (the real controller ref).
+	ar := &v1alpha1.AnalysisRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ar-multi",
+			Namespace: "ns-prod",
+			UID:       types.UID("ar-uid-multi"),
+		},
+	}
+	isController := true
+	ar.OwnerReferences = []metav1.OwnerReference{
+		{
+			APIVersion: "argoproj.io/v1alpha1",
+			Kind:       "Rollout",
+			Name:       "not-controller",
+			UID:        types.UID("uid-wrong"),
+			Controller: nil, // NOT the controller -- must NOT be picked
+		},
+		{
+			APIVersion: "argoproj.io/v1alpha1",
+			Kind:       "Rollout",
+			Name:       "my-app",
+			UID:        types.UID("uid-right"),
+			Controller: &isController, // controller -- MUST be picked
+		},
+	}
+
+	k := New(mock)
+	m := k.Run(ar, testMetric(defaultCfg()))
+
+	require.Equal(t, v1alpha1.AnalysisPhaseRunning, m.Phase)
+	require.NotNil(t, gotCfg)
+	assert.Equal(t, "my-app", gotCfg.RolloutName,
+		"D-03: walk must pick the Rollout owner ref with Controller==true, not the first match")
+	assert.NotEqual(t, "not-controller", gotCfg.RolloutName,
+		"non-controller Rollout ref must not hijack RolloutName")
+}
+
+// --- Resume tests: AnalysisRun metadata plumbing (Phase 08.1 D-08, R4) ---
+
+// R4 (codex review): Plan 02 modifies Run, Resume, and Terminate but the baseline
+// tests only exercise Run. This test proves populateFromAnalysisRun is wired into
+// Resume by asserting the GetRunResultFn receives a populated *PluginConfig.
+func TestResume_ExtractsAnalysisRunMetadata(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		GetRunResultFn: func(_ context.Context, cfg *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			gotCfg = cfg
+			return &provider.RunResult{State: provider.Running}, nil
+		},
+	}
+
+	// Resume requires a Measurement that already carries the runId metadata
+	// (normally stamped by Run). Mirror the canonical runningMeasurement shape.
+	measurement := v1alpha1.Measurement{
+		Phase: v1alpha1.AnalysisPhaseRunning,
+		Metadata: map[string]string{
+			"runId": "run-1",
+		},
+	}
+
+	ar := testAR("ar-res", "ns-res", "ar-uid-res", "my-app")
+	k := New(mock)
+	_ = k.Resume(ar, testMetric(defaultCfg()), measurement)
+
+	require.NotNil(t, gotCfg, "GetRunResult should have been called during Resume")
+	assert.Equal(t, "ns-res", gotCfg.Namespace,
+		"Resume must populate cfg.Namespace from ar.Namespace (D-01)")
+	assert.Equal(t, "my-app", gotCfg.RolloutName,
+		"Resume must populate cfg.RolloutName from the controller owner ref (D-03)")
+	assert.Equal(t, "ar-res", gotCfg.AnalysisRunName,
+		"Resume must populate cfg.AnalysisRunName from ar.Name")
+	assert.Equal(t, "ar-uid-res", gotCfg.AnalysisRunUID,
+		"Resume must populate cfg.AnalysisRunUID from ar.UID")
 }
 
 // --- Resume tests: thresholds metric ---
