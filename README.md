@@ -143,6 +143,7 @@ See `examples/` for more patterns.
 | Threshold gate | [`examples/threshold-gate/`](examples/threshold-gate/) | Simplest: pass/fail based on k6 thresholds |
 | Error rate + latency | [`examples/error-rate-latency/`](examples/error-rate-latency/) | Combined HTTP error rate and p95 latency gate |
 | Full canary | [`examples/canary-full/`](examples/canary-full/) | Step plugin trigger + metric analysis gate |
+| k6-operator (in-cluster) | [`examples/k6-operator/`](examples/k6-operator/) | In-cluster k6 execution via k6-operator with RBAC and ConfigMap script |
 
 Each example directory contains:
 - `analysistemplate.yaml` (or `rollout.yaml`) -- the main resource
