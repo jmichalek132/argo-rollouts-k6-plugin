@@ -78,10 +78,10 @@ Plans:
 **Goal**: Bug fix: plugin layers (metric.go, step.go) extract AnalysisRun/Rollout metadata and populate cfg.Namespace, cfg.RolloutName, cfg.AnalysisRunName, cfg.AnalysisRunUID, and a new cfg.RolloutUID field before dispatching to providers, with AR-over-Rollout owner-ref precedence in the k6-operator provider. Exposed by Phase 10 e2e tests.
 **Requirements**: None (bug fix inserted post-Phase-10; not mapped to REQ-IDs)
 **Depends on:** Phase 8
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 08.1-01-PLAN.md -- Add PluginConfig.RolloutUID field, refactor owner-ref helper to AR > Rollout > none precedence (parentOwnerRef), new operator tests
+- [x] 08.1-01-PLAN.md -- Add PluginConfig.RolloutUID field, refactor owner-ref helper to AR > Rollout > none precedence (parentOwnerRef), new operator tests
 - [ ] 08.1-02-PLAN.md -- Wire AnalysisRun metadata (Namespace/RolloutName/AnalysisRunName/AnalysisRunUID) through metric.go Run/Resume/Terminate with owner-ref walk; new metric tests
 - [ ] 08.1-03-PLAN.md -- Wire Rollout metadata (Namespace/RolloutName/RolloutUID) through step.go Run/Terminate/Abort via stopActiveRun; new step tests
 
