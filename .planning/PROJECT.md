@@ -20,13 +20,13 @@ Rollouts automatically pass or roll back based on real load test results — no 
 
 ## Current State
 
-Shipped **v0.2.0** on 2026-04-15. Phase 7 complete — provider routing and ConfigMap script sourcing foundation in place for k6-operator.
+Shipped **v0.2.0** on 2026-04-15. Phase 8 complete — k6-operator provider fully functional with TestRun/PrivateLoadZone CRD lifecycle, distributed execution support, and exit code-based pass/fail determination.
 
-- **Go LOC:** ~23,800 across 95 files
-- **Test coverage:** 91.7% (metric), 89.1% (step)
+- **Go LOC:** ~25,000+ across 100+ files
+- **Test coverage:** 85+ tests in operator package alone (85 pass with -race)
 - **Binaries:** 8 platform variants (linux/darwin x amd64/arm64) via GoReleaser
 - **e2e:** 4 mock scenarios on kind cluster, CI verified passing
-- **Dependencies:** Renovate bot configured for Go modules and GitHub Actions
+- **Dependencies:** Renovate bot configured for Go modules and GitHub Actions; k6-operator v1.3.2 added
 
 ## Requirements
 
@@ -49,7 +49,7 @@ Shipped **v0.2.0** on 2026-04-15. Phase 7 complete — provider routing and Conf
 
 - [ ] ConfigMap script sourcing: k6 .js script stored in a Kubernetes ConfigMap, referenced by name/key in plugin config
 - [ ] In-cluster k6 Job execution: KubernetesJobProvider creates `batch/v1` Jobs with k6 container
-- [ ] k6-operator CRD support: trigger `TestRun` CRs via grafana/k6-operator for distributed execution
+- [x] k6-operator CRD support: trigger `TestRun` CRs via grafana/k6-operator for distributed execution — Validated in Phase 8
 - [ ] Local binary execution research: investigate running k6 as a subprocess of the plugin process
 
 ### Deferred
@@ -115,4 +115,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-15 after Phase 7 completion*
+*Last updated: 2026-04-16 after Phase 8 completion*
