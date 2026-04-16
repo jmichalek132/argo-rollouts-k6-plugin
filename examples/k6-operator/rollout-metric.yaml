@@ -1,0 +1,55 @@
+# Canary Rollout with k6-operator metric plugin analysis gate.
+# At 20% canary weight, runs a background AnalysisRun that triggers
+# an in-cluster k6 test and evaluates threshold results.
+#
+# Flow:
+#   1. Route 20% traffic to canary
+#   2. AnalysisRun triggers k6-operator TestRun via metric plugin
+#   3. Metric plugin polls until test completes, evaluates thresholds
+#   4. If thresholds pass (result == 1), promote to 100%
+#   5. If thresholds fail, automatic rollback
+#
+# NOTE: Argo Rollouts skips canary steps on the initial deployment.
+# The analysis step will only execute when you push a second revision
+# (e.g., change the container image tag). See README.md for details.
+#
+# Prerequisites:
+#   1. k6-operator installed
+#   2. RBAC applied (clusterrole.yaml + clusterrolebinding.yaml)
+#   3. k6 script ConfigMap created (configmap-script.yaml)
+#   4. AnalysisTemplate applied (analysistemplate.yaml)
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: my-app
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+        - name: my-app
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - analysis:
+            templates:
+              - templateName: k6-operator-threshold-check
+            args:
+              - name: script-configmap
+                value: k6-load-test
+              - name: script-key
+                value: test.js
+              - name: namespace
+                value: default
+        - setWeight: 100

@@ -1,0 +1,17 @@
+# ClusterRoleBinding for the argo-rollouts-k6-plugin ClusterRole.
+# Binds to the argo-rollouts ServiceAccount in the argo-rollouts namespace.
+#
+# If your Argo Rollouts controller uses a different ServiceAccount or namespace,
+# update the subject below accordingly.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-rollouts-k6-plugin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-rollouts-k6-plugin
+subjects:
+  - kind: ServiceAccount
+    name: argo-rollouts
+    namespace: argo-rollouts
