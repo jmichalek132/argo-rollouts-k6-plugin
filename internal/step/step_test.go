@@ -7,9 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/argoproj/argo-rollouts/utils/plugin/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider"
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/providertest"
@@ -47,6 +50,19 @@ func makeContext(config, status json.RawMessage) *types.RpcStepContext {
 		PluginName: "jmichalek132/k6-step",
 		Config:     config,
 		Status:     status,
+	}
+}
+
+// testRollout builds a minimal *v1alpha1.Rollout fixture for D-08 tests.
+// The step plugin populates cfg.Namespace/RolloutName/RolloutUID directly from this
+// object -- no owner-ref walk is needed (D-06: Rollout IS the parent).
+func testRollout(name, ns, uid string) *v1alpha1.Rollout {
+	return &v1alpha1.Rollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			UID:       k8stypes.UID(uid),
+		},
 	}
 }
 
@@ -160,6 +176,103 @@ func TestRun_FirstCall_Trigger(t *testing.T) {
 	assert.Equal(t, "run-999", state.RunID)
 	assert.NotEmpty(t, state.TriggeredAt)
 	assert.Equal(t, "https://app.k6.io/runs/run-999", state.TestRunURL)
+}
+
+// --- Run tests: Rollout metadata plumbing (Phase 08.1 D-08) ---
+
+func TestRun_PopulatesCfgFromRollout(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+			gotCfg = cfg
+			return "run-1", nil
+		},
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Running,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+	}
+	rollout := testRollout("my-app", "ns-prod", "rollout-uid-1")
+	p := New(mock)
+	ctx := makeContext(makeConfig(nil), nil)
+	_, rpcErr := p.Run(rollout, ctx)
+
+	require.False(t, rpcErr.HasError())
+	require.NotNil(t, gotCfg, "TriggerRun should have been called")
+	assert.Equal(t, "ns-prod", gotCfg.Namespace, "cfg.Namespace should be populated from rollout.Namespace (D-01)")
+	assert.Equal(t, "my-app", gotCfg.RolloutName)
+	assert.Equal(t, "rollout-uid-1", gotCfg.RolloutUID, "cfg.RolloutUID should be populated from rollout.UID (D-05)")
+	// Step plugin has no AnalysisRun -- AR fields must stay empty (D-05).
+	assert.Equal(t, "", gotCfg.AnalysisRunName, "step plugin must not set AnalysisRunName")
+	assert.Equal(t, "", gotCfg.AnalysisRunUID, "step plugin must not set AnalysisRunUID")
+}
+
+func TestRun_UserNamespaceWinsOverRollout(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+			gotCfg = cfg
+			return "run-1", nil
+		},
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Running,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+	}
+	// User specifies namespace in the plugin config; Rollout lives in a different namespace.
+	cfgBytes := makeConfig(map[string]interface{}{
+		"namespace": "user-override",
+	})
+	rollout := testRollout("my-app", "ns-rollout", "rollout-uid-1")
+	p := New(mock)
+	ctx := makeContext(cfgBytes, nil)
+	_, rpcErr := p.Run(rollout, ctx)
+
+	require.False(t, rpcErr.HasError())
+	require.NotNil(t, gotCfg)
+	assert.Equal(t, "user-override", gotCfg.Namespace, "user-supplied namespace must win over rollout.Namespace (D-01)")
+	assert.Equal(t, "my-app", gotCfg.RolloutName, "RolloutName still populated even when user sets namespace")
+	assert.Equal(t, "rollout-uid-1", gotCfg.RolloutUID)
+}
+
+// R6 (codex review): the MEDIUM verification gap was that Task 1 extends
+// stopActiveRun's signature so Terminate/Abort propagate Rollout metadata into
+// StopRun, but the baseline tests only exercised Run. This test proves that
+// Terminate delivers a populated *PluginConfig into StopRun -- closing the
+// verification gap for the stop path.
+func TestTerminate_PassesPopulatedConfigToStopRun(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		StopRunFn: func(_ context.Context, cfg *provider.PluginConfig, _ string) error {
+			gotCfg = cfg
+			return nil
+		},
+	}
+
+	// stopActiveRun reads state.RunID from ctx.Status; build a Status blob carrying
+	// a serialized stepState with RunID="run-1" so the call reaches StopRun.
+	state := stepState{RunID: "run-1"}
+	stateBytes, err := json.Marshal(state)
+	require.NoError(t, err)
+
+	rollout := testRollout("my-app", "ns-prod", "rollout-uid-1")
+	p := New(mock)
+	ctx := makeContext(makeConfig(nil), stateBytes)
+
+	_, rpcErr := p.Terminate(rollout, ctx)
+
+	require.False(t, rpcErr.HasError())
+	require.NotNil(t, gotCfg, "StopRun should have been called during Terminate (state has RunID)")
+	assert.Equal(t, "ns-prod", gotCfg.Namespace,
+		"Terminate must propagate cfg.Namespace through stopActiveRun into StopRun (D-01)")
+	assert.Equal(t, "my-app", gotCfg.RolloutName,
+		"Terminate must propagate cfg.RolloutName through stopActiveRun into StopRun (D-06)")
+	assert.Equal(t, "rollout-uid-1", gotCfg.RolloutUID,
+		"Terminate must propagate cfg.RolloutUID through stopActiveRun into StopRun (D-05)")
 }
 
 // --- Run: first call poll-only (STEP-02) ---
