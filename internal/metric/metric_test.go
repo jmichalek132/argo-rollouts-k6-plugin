@@ -17,7 +17,10 @@ import (
 	"github.com/jmichalek132/argo-rollouts-k6-plugin/internal/provider/providertest"
 )
 
-const metricHTTPReqDuration = "http_req_duration"
+const (
+	metricHTTPReqDuration = "http_req_duration"
+	testRunID             = "run-1"
+)
 
 // mockProvider is a type alias for the shared mock, keeping test callsites concise.
 type mockProvider = providertest.MockProvider
@@ -171,7 +174,7 @@ func TestRun_PopulatesCfgFromAnalysisRun(t *testing.T) {
 	mock := &mockProvider{
 		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
 			gotCfg = cfg
-			return "run-1", nil
+			return testRunID, nil
 		},
 	}
 	ar := testAR("ar-1", "ns-prod", "ar-uid-1", "my-app")
@@ -191,7 +194,7 @@ func TestRun_StandaloneAnalysisRun(t *testing.T) {
 	mock := &mockProvider{
 		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
 			gotCfg = cfg
-			return "run-1", nil
+			return testRunID, nil
 		},
 	}
 	ar := testAR("ar-solo", "ns-prod", "ar-uid-solo", "") // no Rollout owner ref
@@ -211,7 +214,7 @@ func TestRun_UserNamespaceWinsOverAR(t *testing.T) {
 	mock := &mockProvider{
 		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
 			gotCfg = cfg
-			return "run-1", nil
+			return testRunID, nil
 		},
 	}
 	// User specifies namespace in the plugin config; AR lives in a different namespace.
@@ -235,7 +238,7 @@ func TestRun_PrefersControllerRolloutOwnerRef(t *testing.T) {
 	mock := &mockProvider{
 		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
 			gotCfg = cfg
-			return "run-1", nil
+			return testRunID, nil
 		},
 	}
 
@@ -296,7 +299,7 @@ func TestResume_ExtractsAnalysisRunMetadata(t *testing.T) {
 	measurement := v1alpha1.Measurement{
 		Phase: v1alpha1.AnalysisPhaseRunning,
 		Metadata: map[string]string{
-			"runId": "run-1",
+			"runId": testRunID,
 		},
 	}
 
@@ -328,7 +331,7 @@ func TestResume_ThresholdsPassed(t *testing.T) {
 		},
 	}
 	k := New(mock)
-	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
 	assert.Equal(t, "1", m.Value)
 	assert.NotNil(t, m.FinishedAt)
@@ -345,7 +348,7 @@ func TestResume_ThresholdsFailed(t *testing.T) {
 		},
 	}
 	k := New(mock)
-	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseFailed, m.Phase)
 	assert.Equal(t, "0", m.Value)
 	assert.NotNil(t, m.FinishedAt)
@@ -366,7 +369,7 @@ func TestResume_HTTPReqFailed(t *testing.T) {
 	cfg := defaultCfg()
 	cfg["metric"] = "http_req_failed"
 	k := New(mock)
-	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
 	assert.Equal(t, "0.023", m.Value)
 }
@@ -391,7 +394,7 @@ func TestResume_HTTPReqDurationP50(t *testing.T) {
 	cfg["metric"] = metricHTTPReqDuration
 	cfg["aggregation"] = "p50"
 	k := New(mock)
-	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
 	assert.Equal(t, "150", m.Value)
 }
@@ -414,7 +417,7 @@ func TestResume_HTTPReqDurationP95(t *testing.T) {
 	cfg["metric"] = metricHTTPReqDuration
 	cfg["aggregation"] = "p95"
 	k := New(mock)
-	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
 	assert.Equal(t, "234.5", m.Value)
 }
@@ -437,7 +440,7 @@ func TestResume_HTTPReqDurationP99(t *testing.T) {
 	cfg["metric"] = metricHTTPReqDuration
 	cfg["aggregation"] = "p99"
 	k := New(mock)
-	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
 	assert.Equal(t, "450", m.Value)
 }
@@ -455,7 +458,7 @@ func TestResume_HTTPReqDuration_MissingAggregation(t *testing.T) {
 	cfg["metric"] = metricHTTPReqDuration
 	// no aggregation
 	k := New(mock)
-	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
 	assert.Contains(t, m.Message, "aggregation")
 }
@@ -473,7 +476,7 @@ func TestResume_HTTPReqDuration_InvalidAggregation(t *testing.T) {
 	cfg["metric"] = metricHTTPReqDuration
 	cfg["aggregation"] = "p100"
 	k := New(mock)
-	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
 	assert.Contains(t, m.Message, "unsupported aggregation")
 }
@@ -493,7 +496,7 @@ func TestResume_HTTPReqs(t *testing.T) {
 	cfg := defaultCfg()
 	cfg["metric"] = "http_reqs"
 	k := New(mock)
-	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseSuccessful, m.Phase)
 	assert.Equal(t, "142.3", m.Value)
 }
@@ -515,7 +518,7 @@ func TestResume_NilMetadata(t *testing.T) {
 	// We simulate the controller passing a pre-populated runId via an explicit map init.
 	measurement := v1alpha1.Measurement{
 		Phase:    v1alpha1.AnalysisPhaseRunning,
-		Metadata: map[string]string{"runId": "run-1"},
+		Metadata: map[string]string{"runId": testRunID},
 	}
 	measurement.Metadata = nil // drop it to trigger the nil guard
 
@@ -538,7 +541,7 @@ func TestResume_RunningState(t *testing.T) {
 		},
 	}
 	k := New(mock)
-	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseRunning, m.Phase)
 	assert.Nil(t, m.FinishedAt)
 }
@@ -553,7 +556,7 @@ func TestResume_ErroredState(t *testing.T) {
 		},
 	}
 	k := New(mock)
-	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
 	assert.NotEmpty(t, m.Message)
 	assert.NotNil(t, m.FinishedAt)
@@ -569,7 +572,7 @@ func TestResume_AbortedState(t *testing.T) {
 		},
 	}
 	k := New(mock)
-	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
 	assert.NotEmpty(t, m.Message)
 	assert.NotNil(t, m.FinishedAt)
@@ -588,8 +591,8 @@ func TestResume_AlwaysSetsMetadata(t *testing.T) {
 		},
 	}
 	k := New(mock)
-	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement("run-1"))
-	assert.Equal(t, "run-1", m.Metadata["runId"])
+	m := k.Resume(nil, testMetric(defaultCfg()), runningMeasurement(testRunID))
+	assert.Equal(t, testRunID, m.Metadata["runId"])
 	assert.Equal(t, "https://app.k6.io/runs/run-1", m.Metadata["testRunURL"])
 	assert.Equal(t, "Passed", m.Metadata["runState"])
 	assert.Equal(t, "1", m.Metadata["metricValue"])
@@ -613,12 +616,12 @@ func TestTerminate_WithRunIdCallsStopRun(t *testing.T) {
 	mock := &mockProvider{
 		StopRunFn: func(_ context.Context, _ *provider.PluginConfig, runID string) error {
 			stopped = true
-			assert.Equal(t, "run-1", runID)
+			assert.Equal(t, testRunID, runID)
 			return nil
 		},
 	}
 	k := New(mock)
-	m := k.Terminate(nil, testMetric(defaultCfg()), runningMeasurement("run-1"))
+	m := k.Terminate(nil, testMetric(defaultCfg()), runningMeasurement(testRunID))
 	assert.True(t, stopped, "StopRun should be called")
 	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
 	assert.Contains(t, m.Message, "terminated")
@@ -654,7 +657,7 @@ func TestConfig_InvalidMetricType(t *testing.T) {
 	cfg := defaultCfg()
 	cfg["metric"] = "invalid_metric"
 	k := New(mock)
-	m := k.Resume(nil, testMetric(cfg), runningMeasurement("run-1"))
+	m := k.Resume(nil, testMetric(cfg), runningMeasurement(testRunID))
 	assert.Equal(t, v1alpha1.AnalysisPhaseError, m.Phase)
 	assert.Contains(t, m.Message, "unsupported metric type")
 }
