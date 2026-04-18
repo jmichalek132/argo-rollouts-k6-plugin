@@ -87,13 +87,13 @@ Plans:
 
 ### Phase 08.2: Default cfg.Parallelism=1 when unset - k6-operator TestRun stays paused with parallelism=0, blocking e2e (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal**: Bug fix: `internal/provider/operator/testrun.go` builds a TestRun CR with `spec.Parallelism=int32(cfg.Parallelism)`, which becomes `0` when users omit `parallelism` in their plugin config. k6-operator treats `spec.parallelism=0` as "paused" so no runner pods spawn and the AnalysisRun hangs forever. Fix defaults `cfg.Parallelism == 0` to `1` inside `buildTestRun` (pure builder, no mutation, no logging); `ValidateK6Operator` is left unchanged (it still accepts `0` as "unset"). Includes two new unit tests pinning the default, Godoc updates on `PluginConfig.Parallelism` and `buildTestRun`, a one-line note in `examples/k6-operator/README.md`, and an e2e regression guard in `e2e/k6_operator_test.go` exercising the parallelism-omitted path end to end.
+**Requirements**: None (bug fix inserted post-Phase-10; not mapped to REQ-IDs)
 **Depends on:** Phase 08.1
-**Plans:** 0 plans
+**Plans:** 1 plan
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 08.2 to break down)
+- [ ] 08.2-01-PLAN.md -- Default Parallelism=1 inside buildTestRun; two new builder tests; Godoc on config.go + testrun.go; README note; e2e regression guard; make lint
 
 ### Phase 9: Metric Integration
 **Goal**: Metric plugin extracts k6 result metrics from in-cluster test runs for AnalysisTemplate successCondition evaluation
