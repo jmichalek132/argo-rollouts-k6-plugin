@@ -85,6 +85,16 @@ Plans:
 - [x] 08.1-02-PLAN.md -- Wire AnalysisRun metadata (Namespace/RolloutName/AnalysisRunName/AnalysisRunUID) through metric.go Run/Resume/Terminate with owner-ref walk; new metric tests
 - [x] 08.1-03-PLAN.md -- Wire Rollout metadata (Namespace/RolloutName/RolloutUID) through step.go Run/Terminate/Abort via stopActiveRun; new step tests
 
+### Phase 08.2: Default cfg.Parallelism=1 when unset - k6-operator TestRun stays paused with parallelism=0, blocking e2e (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 08.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 08.2 to break down)
+
 ### Phase 9: Metric Integration
 **Goal**: Metric plugin extracts k6 result metrics from in-cluster test runs for AnalysisTemplate successCondition evaluation
 **Depends on**: Phase 8
