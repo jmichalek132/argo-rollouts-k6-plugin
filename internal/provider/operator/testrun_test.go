@@ -95,6 +95,31 @@ func TestBuildTestRun_Parallelism(t *testing.T) {
 	assert.Equal(t, int32(4), tr.Spec.Parallelism)
 }
 
+func TestBuildTestRun_DefaultsParallelismWhenUnset(t *testing.T) {
+	// Pins D-01: buildTestRun applies Parallelism=1 when cfg.Parallelism == 0
+	// (the Go zero value, i.e. user omitted parallelism from plugin config).
+	// k6-operator treats spec.Parallelism=0 as "paused"; the default here is
+	// what makes parallelism genuinely optional end-to-end.
+	cfg := &provider.PluginConfig{
+		RolloutName: "my-app",
+		// Parallelism left at zero value (unset).
+	}
+	tr := buildTestRun(cfg, "cm", "test.js", "ns", "k6-test")
+	assert.Equal(t, int32(1), tr.Spec.Parallelism, "unset Parallelism must default to 1")
+}
+
+func TestBuildTestRun_PreservesExplicitParallelism(t *testing.T) {
+	// Pins D-04: the default only fires on zero. Explicit non-zero values
+	// (here, 4) must pass through unchanged. Overlaps with TestBuildTestRun_Parallelism
+	// intentionally -- this test documents the "only zero defaults" rule.
+	cfg := &provider.PluginConfig{
+		RolloutName: "my-app",
+		Parallelism: 4,
+	}
+	tr := buildTestRun(cfg, "cm", "test.js", "ns", "k6-test")
+	assert.Equal(t, int32(4), tr.Spec.Parallelism, "explicit Parallelism must not be overwritten by the default")
+}
+
 func TestBuildTestRun_RunnerImage(t *testing.T) {
 	cfg := &provider.PluginConfig{
 		RolloutName: "my-app",
