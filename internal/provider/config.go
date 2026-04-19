@@ -31,6 +31,13 @@ type PluginConfig struct {
 	Namespace    string        `json:"namespace,omitempty"`
 
 	// Phase 8 k6-operator fields (per D-06)
+
+	// Parallelism is the number of k6 runner pods. Defaults to 1 when unset or zero
+	// (applied by buildTestRun per D-01 / Phase 08.2). k6-operator treats
+	// spec.Parallelism=0 as "paused", so forwarding 0 would leave the TestRun
+	// permanently paused; the plugin resolves 0 to 1 at the TestRun construction site.
+	// ValidateK6Operator accepts Parallelism==0 at the config boundary ("means unset")
+	// and rejects negative values.
 	Parallelism int                          `json:"parallelism,omitempty"`
 	Resources   *corev1.ResourceRequirements `json:"resources,omitempty"`
 	RunnerImage string                       `json:"runnerImage,omitempty"`

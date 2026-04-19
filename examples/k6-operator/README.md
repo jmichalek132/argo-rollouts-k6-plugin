@@ -83,6 +83,8 @@ options:
 These detailed metrics require the k6 script to export `handleSummary` --
 see the next section and `configmap-script.yaml`.
 
+If `parallelism` is omitted from the plugin config, the plugin submits the TestRun with `parallelism=1`.
+
 ## Initial Deploy Behavior
 
 Argo Rollouts **skips canary steps on the initial deployment** of a Rollout.
