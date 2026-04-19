@@ -137,7 +137,22 @@ func gvrForResource(resource string) schema.GroupVersionResource {
 
 // buildTestRun constructs a TestRun CR from plugin config (per D-01).
 // Pure struct construction -- no I/O.
+//
+// Applies the Parallelism=1 default when cfg.Parallelism == 0 (Go zero value /
+// "unset"). k6-operator treats spec.Parallelism=0 as "paused", so forwarding 0
+// would leave the TestRun waiting forever and no runner pods would spawn.
+// ValidateK6Operator continues to accept Parallelism==0 at the config boundary
+// ("0 means unset"); the default is applied here at the consumer site per D-01.
 func buildTestRun(cfg *provider.PluginConfig, scriptCMName, scriptKey, namespace, crName string) *k6v1alpha1.TestRun {
+	// Default Parallelism=1 when unset (cfg.Parallelism == 0) per D-01 / Phase 08.2.
+	// k6-operator treats spec.Parallelism=0 as "paused" -- forwarding 0 would
+	// leave the TestRun permanently paused. Silent default (no log emission)
+	// per D-02 keeps buildTestRun a pure builder.
+	parallelism := int32(cfg.Parallelism)
+	if cfg.Parallelism == 0 {
+		parallelism = 1
+	}
+
 	tr := &k6v1alpha1.TestRun{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "k6.io/v1alpha1",
@@ -159,7 +174,7 @@ func buildTestRun(cfg *provider.PluginConfig, scriptCMName, scriptKey, namespace
 					File: scriptKey,
 				},
 			},
-			Parallelism: int32(cfg.Parallelism),
+			Parallelism: parallelism,
 			Runner: k6v1alpha1.Pod{
 				Image: cfg.RunnerImage,
 				Env:   cfg.Env,
