@@ -94,6 +94,20 @@ spec:
 				t.Fatalf("timed out waiting for step plugin to create a TestRun CR")
 			}
 
+			// Phase 08.2 regression: the fixture omits `parallelism` from the
+			// plugin step config; the plugin must default Parallelism=1 at the
+			// buildTestRun site so the TestRun is not paused. Read the CR back
+			// directly -- Rollout Healthy alone is weaker signal.
+			par, err := getTestRunParallelism(cfg, cfg.Namespace())
+			if err != nil {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("read TestRun.spec.parallelism: %v", err)
+			}
+			if par != "1" {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("expected TestRun.spec.parallelism=1 (defaulted from unset cfg.Parallelism), got %q", par)
+			}
+
 			// 5-minute timeout: real k6 execution + pod scheduling takes longer than mocked tests.
 			phase, err := waitForRolloutPhase(cfg, "k6-step-k6op-e2e", cfg.Namespace(), "Healthy", 5*time.Minute)
 			if err != nil {
@@ -195,6 +209,20 @@ spec:
 				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
 				t.Errorf("expected metric value %q, got %q", "1", value)
 			}
+
+			// Phase 08.2 regression (mirror of TestK6OperatorStepPass):
+			// the AnalysisTemplate-driven path also omits `parallelism`.
+			// The plugin must default Parallelism=1 at buildTestRun. Read back
+			// directly; AnalysisRun Successful alone is weaker signal.
+			par, err := getTestRunParallelism(cfg, cfg.Namespace())
+			if err != nil {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("read TestRun.spec.parallelism: %v", err)
+			}
+			if par != "1" {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("expected TestRun.spec.parallelism=1 (defaulted from unset cfg.Parallelism), got %q", par)
+			}
 			return ctx
 		}).
 		Teardown(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
@@ -257,6 +285,22 @@ func countTestRuns(cfg *envconf.Config, namespace string) (int, error) {
 		return 0, err
 	}
 	return len(list.Items), nil
+}
+
+// getTestRunParallelism returns the spec.parallelism of the first TestRun CR in
+// the namespace as a string (Kubernetes JSON marshals int32 as a number; we
+// extract via jsonpath and compare the string form "1"). Phase 08.2 regression
+// guard: proves the plugin emitted the defaulted value when the plugin config
+// omitted `parallelism`.
+func getTestRunParallelism(cfg *envconf.Config, namespace string) (string, error) {
+	cmd := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"get", "testruns", "-n", namespace,
+		"-o", "jsonpath={.items[0].spec.parallelism}")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("kubectl get testruns jsonpath: %w", err)
+	}
+	return string(out), nil
 }
 
 // dumpK6OperatorDiagnostics prints TestRun, pod, and log state on failure to aid debugging.
