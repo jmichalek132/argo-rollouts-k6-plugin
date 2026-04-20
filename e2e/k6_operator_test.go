@@ -588,31 +588,45 @@ func getTestRunLabel(cfg *envconf.Config, name, namespace, label string) (string
 	return string(out), nil
 }
 
+// k6DiagDump describes a single kubectl-get diagnostic dump for
+// dumpK6OperatorDiagnostics. label holds plain text (no format verbs); the fixed
+// format string lives inside emitK6Dump so future contributors cannot accidentally
+// break the output-format invariant.
+type k6DiagDump struct {
+	resource  string   // e.g., "testruns", "analysisruns", "rollouts", "pods"
+	namespace string   // target namespace (substituted into the fixed header)
+	format    string   // "yaml", "wide", "json"
+	label     string   // plain-text section title, e.g., "TestRuns", "k6 runner pods"
+	selectors []string // optional extra kubectl args, e.g., []string{"-l", "app=k6"}
+}
+
+// emitK6Dump runs one `kubectl get` and prints its output under a fixed header.
+// The format literal is fixed and uses exactly TWO %s verbs (label, namespace) --
+// adding a new dump entry only requires a plain label string.
+func emitK6Dump(cfg *envconf.Config, d k6DiagDump) {
+	args := []string{"--kubeconfig", cfg.KubeconfigFile(), "get", d.resource, "-n", d.namespace, "-o", d.format}
+	args = append(args, d.selectors...)
+	if out, err := exec.Command("kubectl", args...).Output(); err == nil {
+		fmt.Printf("=== %s in %s (diagnostic dump) ===\n%s\n", d.label, d.namespace, string(out))
+	}
+}
+
 // dumpK6OperatorDiagnostics prints TestRun, pod, AR/Rollout status, and controller
 // logs on failure to aid debugging. Mirrors the timeout-dump pattern used by
-// waitForAnalysisRun.
+// waitForAnalysisRun. The 5 kubectl-get dumps are driven by a declarative slice;
+// controller-logs dumps use CombinedOutput + --tail and stay explicit.
 func dumpK6OperatorDiagnostics(cfg *envconf.Config, namespace string) {
-	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
-		"get", "testruns", "-n", namespace, "-o", "yaml").Output(); err == nil {
-		fmt.Printf("=== TestRuns in %s (diagnostic dump) ===\n%s\n", namespace, string(out))
+	dumps := []k6DiagDump{
+		{resource: "testruns", namespace: namespace, format: "yaml", label: "TestRuns"},
+		{resource: "pods", namespace: namespace, format: "wide", label: "k6 runner pods", selectors: []string{"-l", "app=k6"}},
+		{resource: "pods", namespace: namespace, format: "wide", label: "All pods"},
+		// AnalysisRun yaml -- exposes status.message where RpcError propagates.
+		{resource: "analysisruns", namespace: namespace, format: "yaml", label: "AnalysisRuns"},
+		// Rollout yaml -- exposes status.message/conditions.
+		{resource: "rollouts", namespace: namespace, format: "yaml", label: "Rollouts"},
 	}
-	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
-		"get", "pods", "-n", namespace, "-l", "app=k6", "-o", "wide").Output(); err == nil {
-		fmt.Printf("=== k6 runner pods in %s (diagnostic dump) ===\n%s\n", namespace, string(out))
-	}
-	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
-		"get", "pods", "-n", namespace, "-o", "wide").Output(); err == nil {
-		fmt.Printf("=== All pods in %s (diagnostic dump) ===\n%s\n", namespace, string(out))
-	}
-	// AnalysisRun yaml -- exposes status.message where RpcError propagates.
-	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
-		"get", "analysisruns", "-n", namespace, "-o", "yaml").Output(); err == nil {
-		fmt.Printf("=== AnalysisRuns in %s (diagnostic dump) ===\n%s\n", namespace, string(out))
-	}
-	// Rollout yaml -- exposes status.message/conditions.
-	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
-		"get", "rollouts", "-n", namespace, "-o", "yaml").Output(); err == nil {
-		fmt.Printf("=== Rollouts in %s (diagnostic dump) ===\n%s\n", namespace, string(out))
+	for _, d := range dumps {
+		emitK6Dump(cfg, d)
 	}
 	// Argo-rollouts controller logs -- plugin stderr is piped here via go-plugin.
 	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
