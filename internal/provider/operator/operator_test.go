@@ -633,6 +633,77 @@ func TestStopRun_InvalidRunID(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid run ID")
 }
 
+// --- Cleanup tests (mirror StopRun shape; success-path TestRun deletion) ---
+
+func TestCleanup_DeletesTestRun(t *testing.T) {
+	crName := testCRName
+	tr := fakeUnstructuredTestRun("test-ns", crName, "finished")
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), tr)
+	fakeClient := k8sfake.NewSimpleClientset()
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
+
+	cfg := defaultOperatorConfig()
+	runID := encodeRunID("test-ns", "testruns", crName)
+
+	err := p.Cleanup(context.Background(), cfg, runID)
+	require.NoError(t, err)
+
+	// Verify it was deleted
+	_, getErr := fakeDyn.Resource(testRunGVR).Namespace("test-ns").Get(
+		context.Background(), crName, metav1.GetOptions{},
+	)
+	assert.Error(t, getErr, "TestRun should no longer exist after Cleanup")
+}
+
+func TestCleanup_DeletesPrivateLoadZone(t *testing.T) {
+	crName := testCRName
+	plz := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "k6.io/v1alpha1",
+			"kind":       "PrivateLoadZone",
+			"metadata": map[string]interface{}{
+				"name":      crName,
+				"namespace": "test-ns",
+			},
+		},
+	}
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme(), plz)
+	fakeClient := k8sfake.NewSimpleClientset()
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
+
+	cfg := defaultOperatorConfig()
+	runID := encodeRunID("test-ns", "privateloadzones", crName)
+
+	err := p.Cleanup(context.Background(), cfg, runID)
+	require.NoError(t, err)
+}
+
+func TestCleanup_NotFound_ReturnsSuccess(t *testing.T) {
+	// Empty fake dyn client (no CR exists).
+	// Cleanup must treat NotFound as success (idempotent -- the CR may have already
+	// been reaped by k6-operator or by Terminate/Abort via StopRun).
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme())
+	fakeClient := k8sfake.NewSimpleClientset()
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
+
+	cfg := defaultOperatorConfig()
+	runID := encodeRunID("test-ns", "testruns", "nonexistent-cr")
+
+	err := p.Cleanup(context.Background(), cfg, runID)
+	assert.NoError(t, err, "NotFound should be treated as success (idempotent cleanup)")
+}
+
+func TestCleanup_InvalidRunID(t *testing.T) {
+	fakeDyn := fake.NewSimpleDynamicClient(testDynScheme())
+	fakeClient := k8sfake.NewSimpleClientset()
+	p := NewK6OperatorProvider(WithClient(fakeClient), WithDynClient(fakeDyn))
+
+	cfg := defaultOperatorConfig()
+	err := p.Cleanup(context.Background(), cfg, "malformed-id")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid run ID")
+}
+
 // --- Validate tests ---
 
 func TestValidate_DelegatesToValidateK6Operator(t *testing.T) {

@@ -20,6 +20,20 @@ func defaultConfig() *provider.PluginConfig {
 	}
 }
 
+// --- Cleanup tests ---
+
+// TestCleanup_IsNoOp verifies GrafanaCloudProvider.Cleanup returns nil without
+// making any HTTP call. The Cloud API retains completed runs server-side; the
+// plugin has no client-side resources to release. No httptest fixture is
+// needed because the method body is a pure no-op -- if it ever tries to make
+// an outbound call the test would panic (nil http.Client) or hang (live URL).
+func TestCleanup_IsNoOp(t *testing.T) {
+	p := NewGrafanaCloudProvider()
+	cfg := defaultConfig()
+	err := p.Cleanup(context.Background(), cfg, "12345")
+	assert.NoError(t, err, "Cleanup must be a no-op for grafana-cloud")
+}
+
 func strPtr(s string) *string {
 	return &s
 }

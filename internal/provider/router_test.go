@@ -17,6 +17,8 @@ type internalMock struct {
 	triggerCalled   bool
 	getResultCalled bool
 	stopCalled      bool
+	cleanupCalled   bool
+	cleanupRunID    string
 }
 
 func (m *internalMock) TriggerRun(_ context.Context, _ *PluginConfig) (string, error) {
@@ -31,6 +33,12 @@ func (m *internalMock) GetRunResult(_ context.Context, _ *PluginConfig, _ string
 
 func (m *internalMock) StopRun(_ context.Context, _ *PluginConfig, _ string) error {
 	m.stopCalled = true
+	return nil
+}
+
+func (m *internalMock) Cleanup(_ context.Context, _ *PluginConfig, runID string) error {
+	m.cleanupCalled = true
+	m.cleanupRunID = runID
 	return nil
 }
 
@@ -99,6 +107,17 @@ func TestRouter_StopRun_Dispatch(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, operatorMock.stopCalled, "operator mock StopRun should be called")
 	assert.False(t, cloudMock.stopCalled, "cloud mock should NOT be called")
+}
+
+func TestRouter_CleanupDispatchesToResolvedProvider(t *testing.T) {
+	r, cloudMock, operatorMock := setupRouter()
+	cfg := &PluginConfig{Provider: "k6-operator"}
+	err := r.Cleanup(context.Background(), cfg, "test-ns/testruns/run-xyz")
+	require.NoError(t, err)
+	assert.True(t, operatorMock.cleanupCalled, "operator mock Cleanup should be called")
+	assert.Equal(t, "test-ns/testruns/run-xyz", operatorMock.cleanupRunID,
+		"operator mock should receive the exact runID passed to Router.Cleanup")
+	assert.False(t, cloudMock.cleanupCalled, "cloud mock Cleanup should NOT be called")
 }
 
 func TestRouter_Name(t *testing.T) {
