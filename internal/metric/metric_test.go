@@ -105,10 +105,230 @@ func TestGetMetadata_ReturnsEmptyMap(t *testing.T) {
 
 // --- GarbageCollect tests ---
 
-func TestGarbageCollect_ReturnsNilRpcError(t *testing.T) {
-	k := New(&mockProvider{})
-	rpcErr := k.GarbageCollect(nil, v1alpha1.Metric{}, 0)
+// arWithMeasurements builds an AnalysisRun with MetricResults populated so
+// GarbageCollect has runIDs to walk. Keeping this helper local (not in the
+// top-level helpers block) because only GC tests need this shape.
+func arWithMeasurements(metricName string, measurements ...v1alpha1.Measurement) *v1alpha1.AnalysisRun {
+	return &v1alpha1.AnalysisRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ar-gc",
+			Namespace: "ns-gc",
+			UID:       types.UID("ar-uid-gc"),
+		},
+		Status: v1alpha1.AnalysisRunStatus{
+			MetricResults: []v1alpha1.MetricResult{
+				{
+					Name:         metricName,
+					Measurements: measurements,
+				},
+			},
+		},
+	}
+}
+
+func TestGarbageCollect_CallsCleanupForEachMeasurementRunId(t *testing.T) {
+	// AR with two measurements for the matching metric -- Cleanup must be called
+	// once per non-empty runId, in order.
+	var cleanupCalls []string
+	mock := &mockProvider{
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, runID string) error {
+			cleanupCalls = append(cleanupCalls, runID)
+			return nil
+		},
+	}
+
+	ar := arWithMeasurements("k6-test",
+		v1alpha1.Measurement{Metadata: map[string]string{"runId": "ns-a/testruns/run-1"}},
+		v1alpha1.Measurement{Metadata: map[string]string{"runId": "ns-a/testruns/run-2"}},
+	)
+
+	k := New(mock)
+	// k6-operator cfg so parseConfig passes without apiToken/stackId/testId.
+	cfg := map[string]interface{}{
+		"provider": "k6-operator",
+		"metric":   "thresholds",
+		"configMapRef": map[string]interface{}{
+			"name": "k6-scripts",
+			"key":  "test.js",
+		},
+	}
+	rpcErr := k.GarbageCollect(ar, testMetric(cfg), 0)
+
+	assert.Empty(t, rpcErr.Error(), "GC must return empty RpcError")
+	require.Equal(t, []string{"ns-a/testruns/run-1", "ns-a/testruns/run-2"}, cleanupCalls,
+		"Cleanup must be called once per measurement runId, in order")
+}
+
+// TestGarbageCollect_CloudProviderSeesCleanupCalls proves the metric layer is
+// provider-agnostic when dispatching Cleanup -- the no-op-ness of grafana-cloud
+// is a provider concern, not a metric-layer concern. The cloud package's
+// TestCleanup_IsNoOp proves the other half of the contract.
+func TestGarbageCollect_CloudProviderSeesCleanupCalls(t *testing.T) {
+	cleanupCount := 0
+	mock := &mockProvider{
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCount++
+			return nil
+		},
+	}
+
+	ar := arWithMeasurements("k6-test",
+		v1alpha1.Measurement{Metadata: map[string]string{"runId": "12345"}},
+	)
+
+	k := New(mock)
+	// grafana-cloud (default provider) cfg.
+	rpcErr := k.GarbageCollect(ar, testMetric(defaultCfg()), 0)
+
 	assert.Empty(t, rpcErr.Error())
+	assert.Equal(t, 1, cleanupCount,
+		"GC dispatches Cleanup regardless of provider; no-op-ness lives in the provider itself")
+}
+
+func TestGarbageCollect_LogsWarnOnCleanupErrorAndReturnsNilRpcError(t *testing.T) {
+	// GC-03: Cleanup errors are logged at Warn but NEVER surface as RpcError.
+	// We assert via a call counter (the fact that Cleanup was called) plus the
+	// empty RpcError -- the slog.Warn itself is not asserted (slog tests are
+	// fragile and the contract is the returned RpcError, not log output).
+	cleanupCount := 0
+	mock := &mockProvider{
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCount++
+			return fmt.Errorf("api unavailable")
+		},
+	}
+
+	ar := arWithMeasurements("k6-test",
+		v1alpha1.Measurement{Metadata: map[string]string{"runId": "ns-a/testruns/run-err"}},
+	)
+
+	k := New(mock)
+	cfg := map[string]interface{}{
+		"provider": "k6-operator",
+		"metric":   "thresholds",
+		"configMapRef": map[string]interface{}{
+			"name": "k6-scripts",
+			"key":  "test.js",
+		},
+	}
+	rpcErr := k.GarbageCollect(ar, testMetric(cfg), 0)
+
+	assert.Empty(t, rpcErr.Error(), "GC-03: Cleanup errors must NEVER surface as RpcError")
+	assert.Equal(t, 1, cleanupCount, "Cleanup must still be invoked for each runId")
+}
+
+func TestGarbageCollect_NilAnalysisRun(t *testing.T) {
+	cleanupCount := 0
+	mock := &mockProvider{
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCount++
+			return nil
+		},
+	}
+	k := New(mock)
+
+	rpcErr := k.GarbageCollect(nil, testMetric(defaultCfg()), 0)
+	assert.Empty(t, rpcErr.Error(), "nil AR must return empty RpcError")
+	assert.Equal(t, 0, cleanupCount, "nil AR must NOT trigger Cleanup calls")
+}
+
+func TestGarbageCollect_EmptyMetricResults(t *testing.T) {
+	cleanupCount := 0
+	mock := &mockProvider{
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCount++
+			return nil
+		},
+	}
+
+	// AR with no MetricResults at all (empty Status).
+	ar := &v1alpha1.AnalysisRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ar-empty",
+			Namespace: "ns-empty",
+		},
+	}
+
+	k := New(mock)
+	rpcErr := k.GarbageCollect(ar, testMetric(defaultCfg()), 0)
+	assert.Empty(t, rpcErr.Error())
+	assert.Equal(t, 0, cleanupCount, "empty MetricResults must NOT trigger Cleanup")
+}
+
+func TestGarbageCollect_MeasurementWithoutRunId(t *testing.T) {
+	// Measurements with empty or missing runId must be skipped silently -- they
+	// correspond to measurements that errored before runId assignment (e.g.
+	// parseConfig failure in Run) and have no backing CR to clean up.
+	cleanupCount := 0
+	mock := &mockProvider{
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCount++
+			return nil
+		},
+	}
+
+	ar := arWithMeasurements("k6-test",
+		v1alpha1.Measurement{Metadata: map[string]string{}},                // no runId key
+		v1alpha1.Measurement{Metadata: map[string]string{"runId": ""}},     // empty runId
+		v1alpha1.Measurement{Metadata: map[string]string{"other": "junk"}}, // wrong key
+	)
+
+	k := New(mock)
+	rpcErr := k.GarbageCollect(ar, testMetric(defaultCfg()), 0)
+	assert.Empty(t, rpcErr.Error())
+	assert.Equal(t, 0, cleanupCount, "empty runIds must be skipped")
+}
+
+// TestGarbageCollect_SkipsMeasurementsForOtherMetricNames guards a subtle
+// regression: GarbageCollect must only walk the MetricResult matching
+// metric.Name. Cleaning up runIds belonging to a different metric (possibly a
+// different provider entirely) would cause cross-metric resource deletion.
+func TestGarbageCollect_SkipsMeasurementsForOtherMetricNames(t *testing.T) {
+	var cleanupCalls []string
+	mock := &mockProvider{
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, runID string) error {
+			cleanupCalls = append(cleanupCalls, runID)
+			return nil
+		},
+	}
+
+	ar := &v1alpha1.AnalysisRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ar-multi",
+			Namespace: "ns-multi",
+		},
+		Status: v1alpha1.AnalysisRunStatus{
+			MetricResults: []v1alpha1.MetricResult{
+				{
+					Name: "other-metric", // different metric -- MUST be skipped
+					Measurements: []v1alpha1.Measurement{
+						{Metadata: map[string]string{"runId": "should-not-be-cleaned"}},
+					},
+				},
+				{
+					Name: "k6-test", // matches metric.Name -- MUST be walked
+					Measurements: []v1alpha1.Measurement{
+						{Metadata: map[string]string{"runId": "ns-multi/testruns/run-ours"}},
+					},
+				},
+			},
+		},
+	}
+
+	k := New(mock)
+	cfg := map[string]interface{}{
+		"provider": "k6-operator",
+		"metric":   "thresholds",
+		"configMapRef": map[string]interface{}{
+			"name": "k6-scripts",
+			"key":  "test.js",
+		},
+	}
+	rpcErr := k.GarbageCollect(ar, testMetric(cfg), 0)
+
+	assert.Empty(t, rpcErr.Error())
+	require.Equal(t, []string{"ns-multi/testruns/run-ours"}, cleanupCalls,
+		"GC must only clean up runIds under the matching metric.Name")
 }
 
 // --- Run tests ---
