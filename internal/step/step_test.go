@@ -21,6 +21,8 @@ import (
 // mockProvider is a type alias for the shared mock, keeping test callsites concise.
 type mockProvider = providertest.MockProvider
 
+const testRunID = "run-1"
+
 // --- Helpers ---
 
 func makeConfig(overrides map[string]interface{}) json.RawMessage {
@@ -220,12 +222,12 @@ func TestPopulateFromRollout_EmptyNameWithUID(t *testing.T) {
 	mock := &mockProvider{
 		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
 			gotCfg = cfg
-			return "run-1", nil
+			return testRunID, nil
 		},
 		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
 			return &provider.RunResult{
 				State:      provider.Running,
-				TestRunURL: "https://app.k6.io/runs/run-1",
+				TestRunURL: "https://app.k6.io/runs/" + testRunID,
 			}, nil
 		},
 	}
