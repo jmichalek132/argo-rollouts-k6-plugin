@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -299,6 +300,290 @@ func getTestRunParallelism(cfg *envconf.Config, namespace string) (string, error
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("kubectl get testruns jsonpath: %w", err)
+	}
+	return string(out), nil
+}
+
+// TestK6OperatorCombinedCanaryARDeletion proves D-07 owner-reference precedence
+// (AR > Rollout) under real Kubernetes cascading GC. It deploys a Rollout that
+// runs the step plugin AND a background AnalysisTemplate (metric plugin) in
+// parallel against the k6-operator provider. While both TestRun CRs are in
+// stage "started" (k6-operator v1.3.x stage enum has no "running" literal), the
+// test deletes the AnalysisRun; kube-apiserver's GC then cascades the AR-owned
+// TestRun (AR ownerRef) but must leave the Rollout-owned step TestRun untouched.
+//
+// This complements the Phase 11 unit tests on Provider.Cleanup / GarbageCollect:
+// those cover the plugin's application-layer cleanup path; this test covers the
+// kube-apiserver owner-reference cascade path. Both must hold independently.
+//
+// Budget: ~5 min (k6 duration 120s + polling + kube GC latency + teardown).
+func TestK6OperatorCombinedCanaryARDeletion(t *testing.T) {
+	f := features.New("k6-operator combined canary AR deletion GC cascade").
+		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			// Service for the Rollout target.
+			svcYAML := fmt.Sprintf(`apiVersion: v1
+kind: Service
+metadata:
+  name: k6-combined-canary-k6op-e2e
+  namespace: %s
+spec:
+  selector:
+    app: k6-combined-canary-k6op-e2e
+  ports:
+    - port: 80
+      targetPort: 80
+`, cfg.Namespace())
+			if err := kubectlApplyStdin(cfg, svcYAML); err != nil {
+				t.Fatalf("create Service: %v", err)
+			}
+
+			// Long-running k6 script ConfigMap (duration: 120s so both
+			// TestRuns stay in stage=started long enough for the AR-delete
+			// window -- the short k6-e2e-script fixture finishes in ~1s).
+			if err := runKubectl(cfg, "apply", "-n", cfg.Namespace(),
+				"-f", "testdata/configmap-script-k6op-long.yaml"); err != nil {
+				t.Fatalf("apply long-script ConfigMap: %v", err)
+			}
+
+			// Rollout (includes AnalysisTemplate doc in the same file).
+			if err := runKubectl(cfg, "apply", "-n", cfg.Namespace(),
+				"-f", "testdata/rollout-combined-canary-k6op.yaml"); err != nil {
+				t.Fatalf("apply Rollout+AnalysisTemplate: %v", err)
+			}
+
+			// Wait for initial deployment Healthy (canary steps are skipped
+			// on the first deploy; background analysis does not run for the
+			// initial rollout either).
+			if _, err := waitForRolloutPhase(cfg, "k6-combined-canary-k6op-e2e",
+				cfg.Namespace(), "Healthy", 2*time.Minute); err != nil {
+				t.Fatalf("initial rollout did not become Healthy: %v", err)
+			}
+
+			// Clear any TestRun/AR leakage from prior tests. Keeps the
+			// polling loops below unambiguous (they count only CRs from the
+			// canary patched in this Setup).
+			_ = runKubectl(cfg, "delete", "testruns", "--all",
+				"-n", cfg.Namespace(), "--ignore-not-found")
+			_ = runKubectl(cfg, "delete", "analysisruns", "--all",
+				"-n", cfg.Namespace(), "--ignore-not-found")
+
+			// Trigger canary via annotation patch. Both the step-plugin
+			// step and the background AnalysisRun (startingStep: 1) start
+			// concurrently once the canary reaches step index 1.
+			if err := runKubectl(cfg, "patch", "rollout", "k6-combined-canary-k6op-e2e",
+				"-n", cfg.Namespace(), "--type=merge",
+				"-p", `{"spec":{"template":{"metadata":{"annotations":{"test/run":"2"}}}}}`); err != nil {
+				t.Fatalf("patch rollout: %v", err)
+			}
+
+			return ctx
+		}).
+		Assess("AR-owned TestRun GC'd on AR delete; Rollout-owned TestRun survives", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			// (1) Wait for BOTH TestRuns to exist -- AR-owned (from the
+			//     background metric plugin) and Rollout-owned (from the
+			//     step plugin). 4-minute deadline accommodates the canary
+			//     reconciliation cycle on slower kind hosts.
+			var arTRs, roTRs []string
+			bothExistDeadline := time.Now().Add(4 * time.Minute)
+			for time.Now().Before(bothExistDeadline) {
+				a, errA := getTestRunsOwnedBy(cfg, cfg.Namespace(), "AnalysisRun", "")
+				r, errR := getTestRunsOwnedBy(cfg, cfg.Namespace(), "Rollout", "")
+				if errA == nil && errR == nil && len(a) >= 1 && len(r) >= 1 {
+					arTRs, roTRs = a, r
+					break
+				}
+				time.Sleep(3 * time.Second)
+			}
+			if len(arTRs) == 0 || len(roTRs) == 0 {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("timed out waiting for both AR-owned and Rollout-owned TestRuns to exist; arTRs=%v roTRs=%v", arTRs, roTRs)
+			}
+
+			// (2) Wait for both to reach stage "started" (k6-operator v1.3.x
+			//     enum: initialization, initialized, created, started,
+			//     stopped, finished, error -- there is no "running" literal,
+			//     see k6-operator api/v1alpha1/testrun_types.go). Fatal on
+			//     timeout: proceeding without both stages observed makes the
+			//     subsequent cascade assertion inconclusive.
+			startedDeadline := time.Now().Add(3 * time.Minute)
+			var arStage, roStage string
+			for time.Now().Before(startedDeadline) {
+				arStage, _ = getTestRunStage(cfg, arTRs[0], cfg.Namespace())
+				roStage, _ = getTestRunStage(cfg, roTRs[0], cfg.Namespace())
+				if arStage == "started" && roStage == "started" {
+					break
+				}
+				time.Sleep(3 * time.Second)
+			}
+			if arStage != "started" || roStage != "started" {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("timed out waiting for both TestRuns to reach stage=started: arStage=%q roStage=%q", arStage, roStage)
+			}
+
+			// (3) Discover the AR name and delete it. Capture the name
+			//     BEFORE the delete; the cascade poll in (4) filters by
+			//     this captured name so a potential Argo-recreated
+			//     background AR (reconcileBackgroundAnalysisRun) cannot
+			//     contaminate the assertion with a new AR-owned TestRun.
+			ars, err := listAnalysisRuns(cfg, cfg.Namespace())
+			if err != nil || len(ars) == 0 {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("no AnalysisRun found to delete: err=%v ars=%v", err, ars)
+			}
+			arName := ars[0]
+			if err := runKubectl(cfg, "delete", "analysisrun", arName,
+				"-n", cfg.Namespace(), "--ignore-not-found"); err != nil {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("kubectl delete analysisrun %s: %v", arName, err)
+			}
+
+			// (4) Assert AR-owned TestRun disappears within 90s (kube
+			//     cascade GC). Filter cascade poll by the CAPTURED arName
+			//     so a recreated background AR's TestRun is not counted
+			//     as "still present".
+			cascadeDeadline := time.Now().Add(90 * time.Second)
+			var arRemaining []string
+			for time.Now().Before(cascadeDeadline) {
+				arRemaining, err = getTestRunsOwnedBy(cfg, cfg.Namespace(), "AnalysisRun", arName)
+				if err == nil && len(arRemaining) == 0 {
+					break
+				}
+				time.Sleep(3 * time.Second)
+			}
+			if len(arRemaining) != 0 {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("TestRun(s) owned by deleted AnalysisRun %q still present 90s after delete; kube cascade GC did not fire: %v", arName, arRemaining)
+			}
+
+			// (5) Assert Rollout-owned TestRun survives. Short settle
+			//     window catches any delayed ripple that would (wrongly)
+			//     also remove the Rollout-owned TestRun.
+			time.Sleep(5 * time.Second)
+			roSurvivors, err := getTestRunsOwnedBy(cfg, cfg.Namespace(), "Rollout", "k6-combined-canary-k6op-e2e")
+			if err != nil {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("list Rollout-owned TestRuns: %v", err)
+			}
+			if len(roSurvivors) == 0 {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("Rollout-owned TestRun was unexpectedly removed by AR cascade; D-07 precedence broken")
+			}
+
+			// (6) Verify the surviving TestRun still carries the managed-by label.
+			labelValue, err := getTestRunLabel(cfg, roSurvivors[0], cfg.Namespace(), "app.kubernetes.io/managed-by")
+			if err != nil {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("read managed-by label on %s: %v", roSurvivors[0], err)
+			}
+			if labelValue != "argo-rollouts-k6-plugin" {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Errorf("expected managed-by=argo-rollouts-k6-plugin on surviving TestRun, got %q", labelValue)
+			}
+
+			return ctx
+		}).
+		Teardown(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			_ = runKubectl(cfg, "delete", "rollout", "k6-combined-canary-k6op-e2e",
+				"-n", cfg.Namespace(), "--ignore-not-found")
+			_ = runKubectl(cfg, "delete", "analysistemplate", "k6-operator-combined-e2e",
+				"-n", cfg.Namespace(), "--ignore-not-found")
+			_ = runKubectl(cfg, "delete", "analysisruns", "--all",
+				"-n", cfg.Namespace(), "--ignore-not-found")
+			_ = runKubectl(cfg, "delete", "service", "k6-combined-canary-k6op-e2e",
+				"-n", cfg.Namespace(), "--ignore-not-found")
+			_ = runKubectl(cfg, "delete", "configmap", "k6-e2e-script-long",
+				"-n", cfg.Namespace(), "--ignore-not-found")
+			_ = runKubectl(cfg, "delete", "testruns", "--all",
+				"-n", cfg.Namespace(), "--ignore-not-found")
+			return ctx
+		}).
+		Feature()
+
+	testenv.Test(t, f)
+}
+
+// getTestRunsOwnedBy returns the names of TestRun CRs in `namespace` whose
+// metadata.ownerReferences contain an entry matching ownerKind (and, if
+// ownerName is non-empty, also matching ownerName). The match is
+// case-sensitive on ownerKind -- use "AnalysisRun" or "Rollout" to mirror
+// the Kind strings parentOwnerRef emits in internal/provider/operator/testrun.go.
+func getTestRunsOwnedBy(cfg *envconf.Config, namespace, ownerKind, ownerName string) ([]string, error) {
+	cmd := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"get", "testruns", "-n", namespace, "-o", "json")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var list struct {
+		Items []struct {
+			Metadata struct {
+				Name            string `json:"name"`
+				OwnerReferences []struct {
+					Kind string `json:"kind"`
+					Name string `json:"name"`
+				} `json:"ownerReferences"`
+			} `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(out, &list); err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, item := range list.Items {
+		for _, ref := range item.Metadata.OwnerReferences {
+			if ref.Kind != ownerKind {
+				continue
+			}
+			if ownerName != "" && ref.Name != ownerName {
+				continue
+			}
+			names = append(names, item.Metadata.Name)
+			break
+		}
+	}
+	return names, nil
+}
+
+// getTestRunStage returns status.stage of a named TestRun CR.
+// k6-operator v1.3.x stage enum: "initialization", "initialized", "created",
+// "started", "stopped", "finished", "error". There is no "running" literal.
+// The combined-canary test waits for "started" on both TestRuns before
+// issuing kubectl delete analysisrun.
+func getTestRunStage(cfg *envconf.Config, name, namespace string) (string, error) {
+	cmd := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"get", "testrun", name, "-n", namespace,
+		"-o", "jsonpath={.status.stage}")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// listAnalysisRuns returns the names of all AnalysisRun CRs in the namespace.
+// Used to discover the Rollout-spawned AR name (Argo names it
+// `<rollout>-<revision>-<template>` but listing is safer than predicting).
+func listAnalysisRuns(cfg *envconf.Config, namespace string) ([]string, error) {
+	cmd := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"get", "analysisruns", "-n", namespace,
+		"-o", "jsonpath={.items[*].metadata.name}")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(out)), nil
+}
+
+// getTestRunLabel returns the value of a named label on a TestRun CR.
+// kubectl jsonpath requires escaping dots and slashes in label keys.
+func getTestRunLabel(cfg *envconf.Config, name, namespace, label string) (string, error) {
+	jp := fmt.Sprintf("jsonpath={.metadata.labels.%s}",
+		strings.NewReplacer(".", `\.`, "/", `\/`).Replace(label))
+	cmd := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"get", "testrun", name, "-n", namespace, "-o", jp)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
 	}
 	return string(out), nil
 }
