@@ -69,7 +69,7 @@ Full details: [milestones/v0.3.0-ROADMAP.md](milestones/v0.3.0-ROADMAP.md)
   3. Cleanup errors (k8s API unavailable, CR already gone, RBAC denied) are logged at `slog.Warn` and do NOT alter `RpcError`, measurement phase, or step phase returned to the controller.
   4. Unit tests assert: GarbageCollect deletes the right CR for k6-operator, is a no-op for grafana-cloud, step terminal-state hook fires once per transition, and cleanup errors never surface.
 **Plans**: TBD
-  - [ ] 11-01-PLAN.md -- Metric plugin GarbageCollect: wire `provider.Cleanup(ctx, cfg, runID)` through K6OperatorProvider (reuse `StopRun` delete path with idempotent NotFound handling), handle grafana-cloud no-op, unit tests for GC-01/GC-03/GC-04(a,b,d)
+  - [x] 11-01-PLAN.md -- Metric plugin GarbageCollect: wire `provider.Cleanup(ctx, cfg, runID)` through K6OperatorProvider (reuse `StopRun` delete path with idempotent NotFound handling), handle grafana-cloud no-op, unit tests for GC-01/GC-03/GC-04(a,b,d) — **completed 2026-04-20** ([11-01-SUMMARY.md](./phases/11-success-path-testrun-cleanup/11-01-SUMMARY.md))
   - [ ] 11-02-PLAN.md -- Step plugin terminal-state cleanup hook: post-terminal delete in `Run` for `Passed`/`Failed`/`Errored` (guard on `state.FinalStatus` to fire exactly once), unit tests for GC-02/GC-03/GC-04(c,d)
 
 ### Phase 12: Combined canary e2e + owner-ref GC cascade
@@ -112,12 +112,12 @@ Run `/gsd-new-milestone` to start planning the next milestone.
 | v1.0 MVP | 1-4 | 9/9 | Complete | 2026-04-14 |
 | v0.2.0 Hardening | 5-6 | 2/2 | Complete | 2026-04-15 |
 | v0.3.0 In-Cluster Execution | 7-10 + 08.1/08.2/08.3 | 13/13 | Complete | 2026-04-20 |
-| v0.4.0 Cleanup | 11-13 | 0/4 | In progress | - |
+| v0.4.0 Cleanup | 11-13 | 1/4 | In progress | - |
 
 ### v0.4.0 Phase Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 11. Success-path TestRun cleanup | 0/2 | Not started | - |
+| 11. Success-path TestRun cleanup | 1/2 | In progress | - |
 | 12. Combined canary e2e + owner-ref GC cascade | 0/1 | Not started | - |
 | 13. Opportunistic polish | 0/1 | Not started | - |

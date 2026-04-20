@@ -14,10 +14,10 @@ Three requirement groups, each mapped to roadmap phases.
 
 ### Cleanup (Success-path Garbage Collection)
 
-- [ ] **GC-01**: Metric plugin implements `GarbageCollect(*v1alpha1.AnalysisRun, v1alpha1.Metric, int) types.RpcError` (the real argo-rollouts v1.9.0 signature; `metricproviders/plugin/rpc/rpc.go:121`) — when called by Argo Rollouts on measurement-retention overflow (`analysis/analysis.go:775-800`, `len(measurements) > limit`), walks `ar.Status.MetricResults` for the entry matching `metric.Name`, iterates its `Measurements`, and deletes every k6-operator TestRun CR the plugin created for that AnalysisRun (CR namespace/resource/name are recoverable from `measurement.Metadata["runId"]`). Cascade deletes runner pods via Kubernetes owner references. No-op when `provider: grafana-cloud` (the Cloud API retains runs server-side — nothing to clean up client-side).
+- [x] **GC-01**: Metric plugin implements `GarbageCollect(*v1alpha1.AnalysisRun, v1alpha1.Metric, int) types.RpcError` (the real argo-rollouts v1.9.0 signature; `metricproviders/plugin/rpc/rpc.go:121`) — when called by Argo Rollouts on measurement-retention overflow (`analysis/analysis.go:775-800`, `len(measurements) > limit`), walks `ar.Status.MetricResults` for the entry matching `metric.Name`, iterates its `Measurements`, and deletes every k6-operator TestRun CR the plugin created for that AnalysisRun (CR namespace/resource/name are recoverable from `measurement.Metadata["runId"]`). Cascade deletes runner pods via Kubernetes owner references. No-op when `provider: grafana-cloud` (the Cloud API retains runs server-side — nothing to clean up client-side). — **Complete 2026-04-20 (11-01)**
 - [ ] **GC-02**: Step plugin invokes the same cleanup path on terminal Run state (`Passed`, `Failed`, `Errored`) — not on `Running` (still in progress) and not on `Aborted` (already handled by `StopRun` via `Terminate`/`Abort`). Success-path cleanup symmetry with metric plugin.
-- [ ] **GC-03**: Cleanup errors are logged at `slog.Warn` level but do NOT cause the analysis or step to fail — resource cleanup is best-effort, plugin output must stay unchanged.
-- [ ] **GC-04**: Unit tests cover: (a) `GarbageCollect` deletes the correct TestRun CR; (b) `GarbageCollect` is a no-op for `grafana-cloud` provider; (c) step plugin terminal-state hook fires once per terminal transition, not on every poll; (d) cleanup errors don't surface to controller.
+- [x] **GC-03**: Cleanup errors are logged at `slog.Warn` level but do NOT cause the analysis or step to fail — resource cleanup is best-effort, plugin output must stay unchanged. — **Complete 2026-04-20 (11-01, metric-side; step-side arrives with 11-02)**
+- [ ] **GC-04**: Unit tests cover: (a) `GarbageCollect` deletes the correct TestRun CR ✅ (11-01); (b) `GarbageCollect` is a no-op for `grafana-cloud` provider ✅ (11-01); (c) step plugin terminal-state hook fires once per terminal transition, not on every poll (pending 11-02); (d) cleanup errors don't surface to controller ✅ (11-01, metric-side).
 
 ### Testing (E2E coverage for owner-ref GC)
 
@@ -73,10 +73,10 @@ Which phases cover which requirements. Populated by gsd-roadmapper.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GC-01 | Phase 11 | Pending |
-| GC-02 | Phase 11 | Pending |
-| GC-03 | Phase 11 | Pending |
-| GC-04 | Phase 11 | Pending |
+| GC-01 | Phase 11 | Complete (11-01, 2026-04-20) |
+| GC-02 | Phase 11 | Pending (11-02) |
+| GC-03 | Phase 11 | Complete (11-01 metric-side, 2026-04-20; 11-02 will extend to step-side) |
+| GC-04 | Phase 11 | Partial — a/b/d done (11-01); c pending (11-02) |
 | TEST-02 | Phase 12 | Pending |
 | POLISH-01 | Phase 13 | Pending |
 | POLISH-02 | Phase 13 | Pending |

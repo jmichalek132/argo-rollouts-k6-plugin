@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.4.0
 milestone_name: Cleanup
 status: executing
-stopped_at: Phase 11 execution started
-last_updated: "2026-04-20T13:00:00Z"
-last_activity: 2026-04-20 -- Phase 11 execution started (2 plans — 11-01 metric GarbageCollect, then 11-02 step terminal-state cleanup)
+stopped_at: Phase 11 plan 01 complete -- metric plugin GarbageCollect implemented
+last_updated: "2026-04-20T12:50:16Z"
+last_activity: 2026-04-20 -- Phase 11 plan 11-01 complete (Provider.Cleanup interface + K6MetricProvider.GarbageCollect walking ar.Status.MetricResults; 249 tests PASS; lint green). Next: 11-02 step terminal-state hook.
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -21,30 +21,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Phase 11 — Success-path TestRun cleanup (GC-01..GC-04). Sequential execution: 11-01 adds Provider.Cleanup interface + metric GarbageCollect; 11-02 adds step terminal-state cleanup hook. 11-02 compile-depends on 11-01.
+**Current focus:** Phase 11 — Success-path TestRun cleanup (GC-01..GC-04). Sequential execution: 11-01 done (metric plugin GarbageCollect + Provider.Cleanup interface); 11-02 next (step terminal-state cleanup hook, compile-depends on 11-01).
 
 ## Current Position
 
 Milestone: v0.4.0 Cleanup
 Phase: 11 (success-path-testrun-cleanup) — EXECUTING
-Plan: 1 of 2 (11-01 metric plugin GarbageCollect)
-Status: Executing Phase 11
-Last activity: 2026-04-20 -- Phase 11 execution started
+Plan: 2 of 2 (11-02 step plugin terminal-state cleanup) — NOT STARTED
+Status: Executing Phase 11 -- 11-01 complete, 11-02 pending
+Last activity: 2026-04-20 -- Plan 11-01 complete (commit af1f2b6)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██▌░░░░░░░] 25%
 
 ## Performance Metrics
 
-**Velocity (from v1.0 + v0.2.0 + v0.3.0 bug fixes):**
+**Velocity (from v1.0 + v0.2.0 + v0.3.0 + v0.4.0 so far):**
 
-- Total plans completed: 17
-- Average duration: ~3.8 min/plan
-- Total execution time: ~45 min
+- Total plans completed: 18
+- Average duration: ~4.9 min/plan
+- Total execution time: ~71 min
 
 **Recent Trend:**
 
-- Last 5 plans: 4min, 2min, 3min, 1min, 11min (08.2-01: narrow TDD bug fix, three tasks + lint gate)
-- Trend: Stable (fast)
+- Last 5 plans: 2min, 3min, 1min, 11min, 26min (11-01: TDD two-task + gate, 10 files modified + requirements hygiene patch)
+- Trend: Stable (slower for wider-scope plans; 11-01 touched 11 files)
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| 11-01 | 26 min | 3 | 11 |
 
 ## Accumulated Context
 
@@ -60,6 +64,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 08.2]: e2e regression guards for builder defaulting read back the emitted CR via kubectl jsonpath rather than inferring from downstream phase. Direct field verification is higher signal than Rollout-Healthy/AnalysisRun-Successful inference.
 - [Phase 08.3]: Do NOT set spec.Cleanup on TestRun CRs. k6-operator v1.3.x deletes CRs with Cleanup=post as soon as stage reaches finished/error, which races the plugin's status-read loop. Success-path cleanup belongs in GarbageCollect (metric) and a terminal-state hook (step) -- a future phase.
 - [Phase 08.3]: When debugging plugin failures against a live cluster, argo-rollouts controller logs (`kubectl logs -n argo-rollouts deploy/argo-rollouts`) are the authoritative source of plugin stderr -- go-plugin pipes plugin binary stderr into the controller's log stream. Any e2e diagnostic dump must capture those logs or the root cause stays hidden.
+- [Phase 11-01]: Add `Cleanup(ctx, cfg, runID) error` method to Provider interface rather than reusing `StopRun`. Semantic split: StopRun means "cancel in-flight run"; Cleanup means "release resources after terminal state". Share the delete code path on k6-operator backend today via deleteCR helper, but keep future Job provider free to differentiate (cancel with grace-period=0, reap with ttlSecondsAfterFinished).
+- [Phase 11-01]: GarbageCollect walks `ar.Status.MetricResults` for the matching `metric.Name` rather than label-selector-by-`ar.UID`. runIDs contain a timestamp hash and are not derivable from ar.UID; Measurements carry the authoritative per-measurement runID. Walk-and-dispatch is simpler than list-and-filter, and matches argo-rollouts' own JobProvider.GarbageCollect precedent (which only uses label selector because Jobs carry a deterministic AnalysisRunUIDLabelKey).
+- [Phase 11-01]: GC-03 cleanup errors are swallowed at slog.Warn and never surface as RpcError. Mirrors the existing pattern in metric.go Terminate which swallows StopRun errors the same way. Retry loops are explicitly Out of Scope per REQUIREMENTS.md.
 
 ### Pending Todos
 
@@ -83,6 +90,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-20T10:00:00Z
-Stopped at: Phase 08.3 plan 01 complete -- spec.Cleanup=post removed from buildTestRun
-Resume file: .planning/phases/08.3-remove-spec-cleanup-post-testrun-gc-d-before-plugin-can-read/08.3-01-SUMMARY.md
+Last session: 2026-04-20T12:50:16Z
+Stopped at: Phase 11 plan 01 complete -- Provider.Cleanup interface + K6MetricProvider.GarbageCollect implemented
+Resume file: .planning/phases/11-success-path-testrun-cleanup/11-01-SUMMARY.md
