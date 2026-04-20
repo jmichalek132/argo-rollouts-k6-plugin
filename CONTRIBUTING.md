@@ -47,18 +47,26 @@ Removes the `bin/` directory.
 ## Project Structure
 
 ```
-cmd/metric-plugin/        Metric plugin binary entrypoint
-cmd/step-plugin/          Step plugin binary entrypoint
-internal/metric/          Metric plugin RPC implementation
-internal/step/            Step plugin RPC implementation
-internal/provider/        Provider interface and shared types
-internal/provider/cloud/  Grafana Cloud k6 provider implementation
-examples/                 Example YAML manifests
+cmd/metric-plugin/           Metric plugin binary entrypoint
+cmd/step-plugin/             Step plugin binary entrypoint
+internal/metric/             Metric plugin RPC implementation
+internal/step/               Step plugin RPC implementation
+internal/provider/           Provider interface, Router multiplexer, shared types
+internal/provider/cloud/     Grafana Cloud k6 provider
+internal/provider/operator/  k6-operator provider (TestRun CRD, dynamic client,
+                             ConfigMap script, handleSummary parsing)
+e2e/                         Kind-cluster e2e test suite
+examples/                    Example YAML manifests (Cloud + k6-operator)
 ```
 
 ## Provider Interface
 
-The plugin uses a `Provider` interface (`internal/provider/provider.go`) to abstract k6 execution backends. The current implementation targets Grafana Cloud k6, but the interface is designed for future backends (in-cluster k6 Jobs, direct binary execution).
+The plugin uses a `Provider` interface (`internal/provider/provider.go`) to abstract k6 execution backends. Two providers ship in v0.3.0:
+
+- `grafana-cloud` — trigger runs via the Grafana Cloud k6 REST API.
+- `k6-operator` — create `k6.io/v1alpha1` TestRun CRs in-cluster, load the k6 script from a ConfigMap, and parse results from runner pod logs.
+
+The `Router` (`internal/provider/router.go`) is a `Provider` implementation that multiplexes to the concrete backend based on the `provider` field in plugin config. Adding a new backend means implementing the `Provider` interface and registering the type with the Router — no changes to `metric.go`/`step.go` are needed.
 
 ### Interface Definition
 
@@ -133,6 +141,8 @@ type PluginConfig struct {
 | `aggregation` | Metric plugin (for `http_req_duration`) | Percentile: `p50`, `p95`, `p99` |
 | `timeout` | Step plugin | Max wait duration (e.g., `10m`). Default: 5m, max: 2h |
 
+The table above covers the Grafana Cloud provider. The k6-operator provider (v0.3.0) adds `provider`, `configMapRef`, `namespace`, `parallelism`, `runnerImage`, `env`, `arguments`, and `resources`. See `internal/provider/config.go` for the full struct and `examples/k6-operator/` for worked examples.
+
 ## Error Conventions
 
 - **Validation errors** (bad config, missing fields): Return `PhaseFailed` with a descriptive message. The analysis or step fails cleanly.
@@ -187,27 +197,24 @@ func (p *MyProvider) Name() string {
 
 Use `net/http/httptest` to mock your backend's HTTP API. See `internal/provider/cloud/cloud_test.go` as a reference for the pattern.
 
-### 3. Wire into the plugin binaries
+### 3. Register with the Router
 
-In `cmd/metric-plugin/main.go`, replace (or conditionally select) the provider:
+`cmd/metric-plugin/main.go` and `cmd/step-plugin/main.go` each wire the concrete providers into a `provider.Router`, which dispatches per-call based on the `provider` field in plugin config. Adding a new backend is one line per binary:
 
 ```go
-// Before:
-p := cloud.NewGrafanaCloudProvider()
+cloudProvider := cloud.NewGrafanaCloudProvider(cloudOpts...)
+operatorProvider := operator.NewK6OperatorProvider()
+myProvider := myprovider.NewMyProvider()
 
-// After (simple replacement):
-p := myprovider.NewMyProvider()
-
-// Or (conditional selection based on config/env):
-var p provider.Provider
-if os.Getenv("K6_PROVIDER") == "my-provider" {
-    p = myprovider.NewMyProvider()
-} else {
-    p = cloud.NewGrafanaCloudProvider()
-}
+router := provider.NewRouter(
+    provider.WithProvider("grafana-cloud", cloudProvider),
+    provider.WithProvider("k6-operator",   operatorProvider),
+    provider.WithProvider("my-provider",   myProvider), // register here
+)
+impl := metric.New(router) // or step.New(router)
 ```
 
-Do the same in `cmd/step-plugin/main.go`.
+Users then opt into your backend by setting `provider: "my-provider"` in their plugin config. `grafana-cloud` stays the default when no `provider` field is set (backward compatibility).
 
 ### 4. Build and test
 

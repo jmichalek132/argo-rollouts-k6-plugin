@@ -1,15 +1,20 @@
 # argo-rollouts-k6-plugin
 
-An Argo Rollouts plugin that integrates Grafana Cloud k6 load testing as analysis gates in canary and blue-green deployments.
+An Argo Rollouts plugin that integrates k6 load testing as analysis gates in canary and blue-green deployments. Supports two execution backends: **Grafana Cloud k6** (managed, API-driven) and **k6-operator** (in-cluster, CRD-driven).
 
 ## How It Works
 
 The plugin ships as two binaries: **metric-plugin** and **step-plugin**.
 
-- **Metric plugin** -- Polls k6 Cloud test run metrics on each AnalysisRun interval and returns configurable metric values (error rate, latency percentiles, threshold pass/fail) for AnalysisTemplate `successCondition` evaluation.
-- **Step plugin** -- Triggers a k6 Cloud test run, waits for completion, and returns pass/fail as a canary step gate.
+- **Metric plugin** -- Polls k6 test run metrics on each AnalysisRun interval and returns configurable metric values (error rate, latency percentiles, threshold pass/fail) for AnalysisTemplate `successCondition` evaluation.
+- **Step plugin** -- Triggers a k6 test run, waits for completion, and returns pass/fail as a canary step gate.
 
-Both plugins use the Grafana Cloud k6 REST API to interact with test runs. The controller loads each plugin binary from a URL specified in the `argo-rollouts-config` ConfigMap.
+Both plugins route to one of two providers based on the `provider` field in plugin config:
+
+- `grafana-cloud` (default) — uses the Grafana Cloud k6 REST API to trigger test runs by test ID and poll results from the cloud dashboard.
+- `k6-operator` — creates [grafana/k6-operator](https://github.com/grafana/k6-operator) `TestRun` CRs in the cluster, loads the k6 script from a ConfigMap, and reads results from runner pod logs via the k6 `handleSummary()` export. No Grafana Cloud account required.
+
+The controller loads each plugin binary from a URL specified in the `argo-rollouts-config` ConfigMap.
 
 ## Installation
 

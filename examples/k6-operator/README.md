@@ -130,3 +130,12 @@ k6 step / analysis gate executes.
   as needed. Avoid `grafana/k6:latest` -- it is non-deterministic across
   runs and will pull a different image whenever the tag is republished.
   Pinning is strongly recommended for production.
+- **Completed TestRun CRs are not deleted automatically on success.** The
+  plugin leaves the CR (and its runner pods) in the target namespace after
+  terminal stage so it can read the final status and parse `handleSummary`.
+  Cancellation paths (Terminate/Abort) still clean up. Success-path cleanup
+  is planned for a future release via a dedicated `GarbageCollect` hook.
+  Until then, successful runs accumulate — clean up periodically with
+  `kubectl delete testruns --all -n <namespace>` (or narrow to managed ones
+  via `-l app.kubernetes.io/managed-by=argo-rollouts-k6-plugin`), or run a
+  namespace-level TTL CronJob.
