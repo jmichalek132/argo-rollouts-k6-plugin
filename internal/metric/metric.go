@@ -54,9 +54,66 @@ func (k *K6MetricProvider) GetMetadata(_ v1alpha1.Metric) map[string]string {
 	return map[string]string{}
 }
 
-// GarbageCollect is a no-op for this plugin (D-14).
-// All state lives in Measurement.Metadata, which Argo Rollouts owns.
-func (k *K6MetricProvider) GarbageCollect(_ *v1alpha1.AnalysisRun, _ v1alpha1.Metric, _ int) types.RpcError {
+// GarbageCollect is called by the Argo Rollouts analysis controller when the
+// number of measurements for a metric exceeds the retention limit (see
+// analysis/analysis.go:775-800 in argo-rollouts v1.9.0). We use this hook as the
+// success-path cleanup trigger for k6-operator TestRun CRs created by Run/Resume.
+//
+// Walks ar.Status.MetricResults for the entry matching metric.Name, iterates
+// its Measurements, extracts Metadata["runId"] per measurement, and dispatches
+// provider.Cleanup for each non-empty runID. The Router resolves the correct
+// provider backend based on cfg.Provider -- grafana-cloud is a no-op, k6-operator
+// issues an idempotent Delete on the TestRun CR.
+//
+// Per GC-03: cleanup errors are logged at slog.Warn with structured fields
+// (runId, metric, analysisRun, namespace, error) but NEVER returned as RpcError.
+// This mirrors how Terminate swallows StopRun errors.
+//
+// The `limit` parameter is used by Argo Rollouts after our return to trim
+// the Measurements slice; we intentionally do not consult it here -- we clean
+// up every runID in the slice. CRs for runIDs whose backing CR is already gone
+// (reclaimed, or the run is still in flight) are no-ops via IsNotFound handling
+// in the provider.
+func (k *K6MetricProvider) GarbageCollect(ar *v1alpha1.AnalysisRun, metric v1alpha1.Metric, _ int) types.RpcError {
+	if ar == nil {
+		return types.RpcError{}
+	}
+
+	cfg, err := parseConfig(metric)
+	if err != nil {
+		// Config parse failure at GC time is non-fatal: log and return empty RpcError.
+		slog.Warn("garbage collect: parseConfig failed, skipping cleanup",
+			"metric", metric.Name,
+			"error", err,
+		)
+		return types.RpcError{}
+	}
+	populateFromAnalysisRun(cfg, ar, "metric.GarbageCollect")
+
+	for _, result := range ar.Status.MetricResults {
+		if result.Name != metric.Name {
+			continue
+		}
+		for _, m := range result.Measurements {
+			runID := m.Metadata["runId"]
+			if runID == "" {
+				continue
+			}
+			// cancel() is called at the END of each iteration (not via defer-in-loop,
+			// which would leak contexts until function return).
+			ctx, cancel := context.WithTimeout(context.Background(), providerCallTimeout)
+			if cleanupErr := k.provider.Cleanup(ctx, cfg, runID); cleanupErr != nil {
+				slog.Warn("failed to cleanup run during garbage collect",
+					"runId", runID,
+					"metric", metric.Name,
+					"analysisRun", cfg.AnalysisRunName,
+					"namespace", cfg.Namespace,
+					"error", cleanupErr,
+				)
+			}
+			cancel()
+		}
+	}
 	return types.RpcError{}
 }
 
