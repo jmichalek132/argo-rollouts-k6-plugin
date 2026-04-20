@@ -95,6 +95,16 @@ Plans:
 Plans:
 - [x] 08.2-01-PLAN.md -- Default Parallelism=1 inside buildTestRun; two new builder tests; Godoc on config.go + testrun.go; README note; e2e regression guard (enriched TestK6OperatorStepPass and TestK6OperatorMetricPass with direct TestRun.spec.parallelism assertion); make lint
 
+### Phase 08.3: Remove spec.Cleanup=post - k6-operator GCs TestRun CR before metric plugin Resume can read status (INSERTED, RETROACTIVE)
+
+**Goal**: Bug fix discovered via `/gsd-debug` after Phase 08.2 e2e re-run. Phase 08.2 unblocked TestRun execution (parallelism=1 default), which exposed a pre-existing race: `buildTestRun` set `spec.Cleanup = "post"`, and k6-operator v1.3.x calls `r.Delete(ctx, k6)` on the TestRun CR (cascade-deleting runner pods) as soon as stage transitions to `finished`/`error`. The metric plugin's 10s Resume poll would then see `testruns.k6.io "..." not found`, the AnalysisRun retried via `consecutiveErrorLimit=4`, and then errored. Fix removes `Cleanup: "post"` from the TestRunSpec literal (leaving the field unset maps to k6-operator's "don't touch the CR" default). Also enriches `dumpK6OperatorDiagnostics` in the e2e tests to include AR/Rollout yaml plus argo-rollouts and k6-operator controller log tails, since the plugin's real error text only appears in the argo-rollouts controller logs (plugin stderr is piped there via go-plugin). Follow-up: implement `GarbageCollect` on the metric plugin and a symmetric post-terminal delete on the step plugin so success-path TestRuns don't leak (not in this phase's scope).
+**Requirements**: None (bug fix inserted post-Phase-10; not mapped to REQ-IDs)
+**Depends on:** Phase 08.2
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 08.3-01-PLAN.md -- Remove spec.Cleanup=post from buildTestRun; invert TestBuildTestRun_Cleanup into TestBuildTestRun_CleanupUnset with regression comment; extend dumpK6OperatorDiagnostics with AR/Rollout yaml + controller logs; verified via `TestK6OperatorMetricPass` (27.81s PASS) and `TestK6OperatorStepPass` (40.49s PASS)
+
 ### Phase 9: Metric Integration
 **Goal**: Metric plugin extracts k6 result metrics from in-cluster test runs for AnalysisTemplate successCondition evaluation
 **Depends on**: Phase 8
