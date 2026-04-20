@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.4.0
 milestone_name: Cleanup
-status: defining-requirements
-stopped_at: v0.4.0 Cleanup milestone started — defining requirements and roadmap
-last_updated: "2026-04-20T12:00:00Z"
-last_activity: 2026-04-20 -- v0.4.0 Cleanup milestone started (GC-01 + TEST-02 + POLISH-01 scope confirmed)
+status: executing
+stopped_at: Phase 11 execution started
+last_updated: "2026-04-20T13:00:00Z"
+last_activity: 2026-04-20 -- Phase 11 execution started (2 plans — 11-01 metric GarbageCollect, then 11-02 step terminal-state cleanup)
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 4
   completed_plans: 0
   percent: 0
 ---
@@ -21,16 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** v0.4.0 Cleanup — close out v0.3.0 tech debt: success-path TestRun cleanup (GC-01), extended e2e coverage for owner-ref GC cascade (TEST-02), opportunistic polish on code-review findings (POLISH-01). No new user-visible features.
+**Current focus:** Phase 11 — Success-path TestRun cleanup (GC-01..GC-04). Sequential execution: 11-01 adds Provider.Cleanup interface + metric GarbageCollect; 11-02 adds step terminal-state cleanup hook. 11-02 compile-depends on 11-01.
 
 ## Current Position
 
 Milestone: v0.4.0 Cleanup
-Phase: Not started (defining requirements → roadmap)
-Plan: —
-Status: Defining requirements and roadmap
-Last activity: 2026-04-20 -- Milestone v0.4.0 started; scope confirmed (GC-01, TEST-02, POLISH-01)
-Next step: `/gsd-plan-phase [N]` after roadmap lands
+Phase: 11 (success-path-testrun-cleanup) — EXECUTING
+Plan: 1 of 2 (11-01 metric plugin GarbageCollect)
+Status: Executing Phase 11
+Last activity: 2026-04-20 -- Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
