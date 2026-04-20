@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 ## Current Position
 
 Milestone: none (v0.3.0 shipped 2026-04-20)
-Last activity: 2026-04-20 -- v0.3.0 milestone archived and tagged
+Last activity: 2026-04-20 -- Completed quick task 260420-hal: bump golangci-lint CI pin to v2.11.4 (Go 1.25)
 Next step: `/gsd-new-milestone` (candidates: success-path TestRun cleanup via GarbageCollect, extended e2e coverage, Kubernetes Job provider)
 
 Progress: n/a (no active milestone)
@@ -66,6 +66,12 @@ None.
 ### Blockers/Concerns
 
 None.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260420-hal | Bump golangci-lint CI pin v2.1.6 → v2.11.4 (Go 1.25 build) | 2026-04-20 | d6a7945 | [260420-hal-bump-golangci-lint-action-version-in-ci-](./quick/260420-hal-bump-golangci-lint-action-version-in-ci-/) |
 
 ### Roadmap Evolution
 
