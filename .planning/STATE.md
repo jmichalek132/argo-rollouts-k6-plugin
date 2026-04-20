@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: (between milestones — v0.3.0 shipped 2026-04-20)
-status: idle
-stopped_at: v0.3.0 milestone shipped and archived
-last_updated: "2026-04-20T10:35:00Z"
-last_activity: 2026-04-20 -- v0.3.0 In-Cluster Execution milestone shipped; archived to milestones/v0.3.0-*.md; tagged v0.3.0
+milestone: v0.4.0
+milestone_name: Cleanup
+status: defining-requirements
+stopped_at: v0.4.0 Cleanup milestone started — defining requirements and roadmap
+last_updated: "2026-04-20T12:00:00Z"
+last_activity: 2026-04-20 -- v0.4.0 Cleanup milestone started (GC-01 + TEST-02 + POLISH-01 scope confirmed)
 progress:
   total_phases: 0
   completed_phases: 0
@@ -21,15 +21,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Between milestones. v0.3.0 shipped. Next milestone not yet defined — run `/gsd-new-milestone` to start planning.
+**Current focus:** v0.4.0 Cleanup — close out v0.3.0 tech debt: success-path TestRun cleanup (GC-01), extended e2e coverage for owner-ref GC cascade (TEST-02), opportunistic polish on code-review findings (POLISH-01). No new user-visible features.
 
 ## Current Position
 
-Milestone: none (v0.3.0 shipped 2026-04-20)
-Last activity: 2026-04-20 -- Completed quick task 260420-hal: bump golangci-lint CI pin to v2.11.4 (Go 1.25)
-Next step: `/gsd-new-milestone` (candidates: success-path TestRun cleanup via GarbageCollect, extended e2e coverage, Kubernetes Job provider)
+Milestone: v0.4.0 Cleanup
+Phase: Not started (defining requirements → roadmap)
+Plan: —
+Status: Defining requirements and roadmap
+Last activity: 2026-04-20 -- Milestone v0.4.0 started; scope confirmed (GC-01, TEST-02, POLISH-01)
+Next step: `/gsd-plan-phase [N]` after roadmap lands
 
-Progress: n/a (no active milestone)
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 

@@ -20,9 +20,16 @@ Shipped **v0.3.0 In-Cluster Execution** on 2026-04-20. k6-operator TestRun CRDs 
 
 Three decimal phases (08.1, 08.2, 08.3) were inserted during milestone execution to fix bugs surfaced by the e2e suite itself — metadata discarding, parallelism=0→paused, and TestRun-GC-before-Resume race. Each fix unblocked the next layer; final e2e after 08.3 was clean.
 
-## Next Milestone
+## Current Milestone: v0.4.0 Cleanup
 
-No milestone in progress. Candidates for next (in priority order): success-path TestRun cleanup (GarbageCollect), extended e2e coverage (combined canary + AR deletion), Kubernetes Job provider as a lighter-weight alternative to k6-operator for simple use cases.
+**Goal:** Close out tech debt that v0.3.0 took on — success-path TestRun cleanup, extended e2e coverage for owner-ref GC cascade, and opportunistic polish on code-review findings. No new user-visible features; make v0.3.0 features production-clean.
+
+**Target features:**
+- Success-path TestRun/pod cleanup via `GarbageCollect` on the metric plugin and a symmetric post-terminal hook on the step plugin (deferred from v0.3.0 Phase 08.3 when `spec.Cleanup=post` was removed).
+- Extended e2e coverage: combined step+metric canary with mid-run AnalysisRun deletion, asserting D-07 owner-ref precedence under real Kubernetes GC cascade.
+- Opportunistic polish: consolidate `buildTestRun` Godoc (three accumulated blocks from 08/08.2/08.3), extract `dumpK6OperatorDiagnostics` helper, resolve 3 INFO items from 08.1-REVIEW.md.
+
+**Out of scope (deferred to future milestones):** Kubernetes Job provider, step plugin `secretKeyRef` support (upstream blocker), custom k6 metrics, README in-cluster quick-start + CHANGELOG.md standup.
 
 ## Requirements
 
@@ -50,16 +57,17 @@ No milestone in progress. Candidates for next (in priority order): success-path 
 
 ### Active
 
-No active requirements. Next milestone not yet defined.
+- [ ] **GC-01** Success-path TestRun/pod cleanup: `GarbageCollect` on the metric plugin + symmetric post-terminal hook on the step plugin — v0.4.0
+- [ ] **TEST-02** Extended e2e coverage: combined step+metric canary with mid-run AnalysisRun deletion, asserting D-07 owner-ref GC precedence — v0.4.0
+- [ ] **POLISH-01** Opportunistic code-quality cleanup: consolidate `buildTestRun` Godoc, extract `dumpK6OperatorDiagnostics` helper, resolve 3 INFO items from 08.1-REVIEW.md — v0.4.0
 
 ### Deferred
 
-- [ ] Success-path TestRun/pod cleanup: implement `GarbageCollect` on the metric plugin and a symmetric post-terminal hook on the step plugin so completed TestRun CRs and runner pods don't leak. `StopRun` already handles cancellation (Terminate/Abort). Deferred from v0.3.0 Phase 08.3 when `spec.Cleanup=post` was removed.
-- [ ] Extended e2e coverage: combined step+metric canary with mid-run AnalysisRun deletion to exercise D-07 owner-ref precedence under real Kubernetes GC cascade. Unit-tested; not e2e-tested.
 - [ ] In-cluster k6 Job execution: KubernetesJobProvider creates `batch/v1` Jobs with k6 container — lighter-weight alternative to k6-operator for single-pod runs.
 - [ ] Local binary execution research: investigate running k6 as a subprocess of the plugin process — flagged as risky in v0.3.0 (grafana/k6#3744 re: stdout protocol corruption).
 - [ ] Step plugin secret handling: step plugin config has no `secretKeyRef` support; API tokens visible in Rollout spec and dashboard UI — upstream Argo Rollouts limitation.
 - [ ] Custom k6 metric support (user-defined Counter/Gauge/Rate/Trend).
+- [ ] README in-cluster quick-start section + `CHANGELOG.md` standup — release-prep hygiene; pair with a future release-prep milestone or bundle with the next feature release.
 
 ### Out of Scope
 
@@ -126,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-20 after v0.3.0 milestone completion.*
+*Last updated: 2026-04-20 at v0.4.0 Cleanup milestone start.*
