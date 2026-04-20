@@ -314,6 +314,13 @@ func TestTriggerRun_WithAnalysisRunUID(t *testing.T) {
 	assert.Equal(t, "AnalysisRun", ownerRefs[0].Kind)
 	assert.Equal(t, "my-app-analysis-run-1", ownerRefs[0].Name, "OwnerReference Name must be populated")
 	assert.Equal(t, "uid-abc-123", string(ownerRefs[0].UID))
+	// IN-03: lock the non-adoption contract. The plugin is a lifecycle observer,
+	// not an owner; argo-rollouts owns the AnalysisRun and k6-operator owns the
+	// TestRun. We reference the parent for GC cascade only.
+	assert.Nil(t, ownerRefs[0].Controller,
+		"parentOwnerRef must not set Controller on the AnalysisRun ref (plugin references parent for GC, does not claim adoption)")
+	assert.Nil(t, ownerRefs[0].BlockOwnerDeletion,
+		"parentOwnerRef must not set BlockOwnerDeletion (use parent's default GC cascade semantics)")
 }
 
 func TestTriggerRun_WithoutAnalysisRunUID(t *testing.T) {
@@ -376,6 +383,12 @@ func TestTriggerRun_WithRolloutUID(t *testing.T) {
 	assert.Equal(t, "Rollout", ownerRefs[0].Kind)
 	assert.Equal(t, "my-app", ownerRefs[0].Name)
 	assert.Equal(t, "rollout-uid-777", string(ownerRefs[0].UID))
+	// IN-03: lock the non-adoption contract on the Rollout-owned branch too.
+	// argo-rollouts owns the Rollout; the plugin references it for GC cascade only.
+	assert.Nil(t, ownerRefs[0].Controller,
+		"parentOwnerRef must not set Controller on the Rollout ref (plugin references parent for GC, does not claim adoption)")
+	assert.Nil(t, ownerRefs[0].BlockOwnerDeletion,
+		"parentOwnerRef must not set BlockOwnerDeletion (use parent's default GC cascade semantics)")
 }
 
 func TestTriggerRun_AnalysisRunUIDWinsOverRolloutUID(t *testing.T) {
@@ -409,6 +422,13 @@ func TestTriggerRun_AnalysisRunUIDWinsOverRolloutUID(t *testing.T) {
 	assert.Equal(t, "AnalysisRun", ownerRefs[0].Kind)
 	assert.Equal(t, "my-app-analysis-1", ownerRefs[0].Name)
 	assert.Equal(t, "ar-uid-abc", string(ownerRefs[0].UID))
+	// IN-03: D-07 precedence picks the AR ref, and the non-adoption contract
+	// holds for the winning ref as well. argo-rollouts owns the AnalysisRun;
+	// the plugin references it for GC cascade only.
+	assert.Nil(t, ownerRefs[0].Controller,
+		"parentOwnerRef must not set Controller on the AnalysisRun ref (plugin references parent for GC, does not claim adoption)")
+	assert.Nil(t, ownerRefs[0].BlockOwnerDeletion,
+		"parentOwnerRef must not set BlockOwnerDeletion (use parent's default GC cascade semantics)")
 }
 
 func TestTriggerRun_ValidationBeforeIO(t *testing.T) {
