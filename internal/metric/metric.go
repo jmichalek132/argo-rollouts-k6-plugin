@@ -300,10 +300,25 @@ func populateFromAnalysisRun(cfg *provider.PluginConfig, ar *v1alpha1.AnalysisRu
 		}
 	}
 
-	slog.Warn("standalone AnalysisRun (no Rollout owner ref); RolloutName left empty",
-		"analysisRun", ar.Name,
-		"namespace", ar.Namespace,
-	)
+	// IN-01: distinguish zero-owner-refs from refs-present-but-no-controller-Rollout
+	// so operators can diagnose standalone-AR cases separately from misconfigured
+	// owner-ref chains (e.g., AR wired to a Deployment instead of a Rollout).
+	refCount := len(ar.OwnerReferences)
+	switch refCount {
+	case 0:
+		slog.Warn("standalone AnalysisRun (no owner references); RolloutName left empty",
+			"analysisRun", ar.Name,
+			"namespace", ar.Namespace,
+			"phase", phase,
+		)
+	default:
+		slog.Warn("AnalysisRun has owner references but no controller=true Rollout; RolloutName left empty",
+			"analysisRun", ar.Name,
+			"namespace", ar.Namespace,
+			"phase", phase,
+			"ownerRefCount", refCount,
+		)
+	}
 }
 
 // parseConfig extracts and validates the plugin config from the metric spec.

@@ -500,6 +500,46 @@ func TestRun_PrefersControllerRolloutOwnerRef(t *testing.T) {
 		"non-controller Rollout ref must not hijack RolloutName")
 }
 
+// TestPopulateFromAnalysisRun_OwnerRefsWithoutControllerRollout exercises the
+// IN-01 branch: AR carries owner references, but none are Kind==Rollout with
+// Controller==true. Asserts cfg.RolloutName is left empty (walk semantics
+// unchanged) and verifies the code path runs without panic. The existing
+// TestRun_StandaloneAnalysisRun still covers the zero-refs branch.
+func TestPopulateFromAnalysisRun_OwnerRefsWithoutControllerRollout(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+			gotCfg = cfg
+			return testRunID, nil
+		},
+	}
+	ar := &v1alpha1.AnalysisRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ar-deploy-owned",
+			Namespace: "ns-prod",
+			UID:       types.UID("ar-uid-deploy"),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "some-deploy",
+					UID:        types.UID("deploy-uid"),
+					// Controller: nil  // deliberately not a controller, not a Rollout
+				},
+			},
+		},
+	}
+	k := New(mock)
+	m := k.Run(ar, testMetric(defaultCfg()))
+
+	require.Equal(t, v1alpha1.AnalysisPhaseRunning, m.Phase)
+	require.NotNil(t, gotCfg)
+	assert.Equal(t, "", gotCfg.RolloutName,
+		"IN-01: non-Rollout owner refs must not populate RolloutName (walk semantics unchanged)")
+	assert.Equal(t, "ar-deploy-owned", gotCfg.AnalysisRunName,
+		"AR identity still populated regardless of owner-ref shape")
+}
+
 // --- Resume tests: AnalysisRun metadata plumbing (Phase 08.1 D-08, R4) ---
 
 // R4 (codex review): Plan 02 modifies Run, Resume, and Terminate but the baseline
