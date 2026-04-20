@@ -186,10 +186,16 @@ func TestBuildTestRun_Labels(t *testing.T) {
 	assert.Equal(t, "my-app", tr.Labels[labelRollout])
 }
 
-func TestBuildTestRun_Cleanup(t *testing.T) {
+func TestBuildTestRun_CleanupUnset(t *testing.T) {
+	// Regression guard for the "TestRun disappears before Resume can read status"
+	// bug: k6-operator v1.3.x deletes the TestRun CR (and cascades pods) when
+	// stage transitions to finished/error if spec.Cleanup == "post". Leaving
+	// Cleanup unset keeps the TestRun and runner pods alive so GetRunResult can
+	// read stage=finished, check runner exit codes, and parse handleSummary
+	// from pod logs. Explicit cleanup happens in StopRun.
 	cfg := &provider.PluginConfig{RolloutName: "my-app"}
 	tr := buildTestRun(cfg, "cm", "test.js", "ns", "k6-test")
-	assert.Equal(t, "post", string(tr.Spec.Cleanup))
+	assert.Empty(t, string(tr.Spec.Cleanup), "spec.Cleanup must NOT default to 'post' -- k6-operator would GC the TestRun before the plugin can read status")
 }
 
 func TestBuildTestRun_OwnerRef_WithUID(t *testing.T) {

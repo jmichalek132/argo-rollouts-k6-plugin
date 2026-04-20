@@ -143,6 +143,19 @@ func gvrForResource(resource string) schema.GroupVersionResource {
 // would leave the TestRun waiting forever and no runner pods would spawn.
 // ValidateK6Operator continues to accept Parallelism==0 at the config boundary
 // ("0 means unset"); the default is applied here at the consumer site per D-01.
+//
+// Does NOT set spec.Cleanup. k6-operator v1.3.x treats spec.Cleanup="post" as
+// "delete the TestRun CR AND its runner pods once stage transitions to
+// finished/error" (see k6-operator testrun_controller.go case "error","finished"
+// which calls r.Delete(ctx, k6)). That caused the metric plugin's Resume to
+// observe the TestRun as NotFound immediately after the run completed -- the
+// plugin could not read the terminal stage or parse handleSummary from pod logs
+// because both the CR and its pods were gone. Leaving Cleanup unset keeps the
+// TestRun and runner pods alive after completion so the plugin can extract
+// exit codes and handleSummary. Explicit deletion happens in StopRun (called
+// by Terminate/Abort paths); success-path cleanup is deferred to a follow-up
+// phase that implements GarbageCollect on the metric plugin (and a symmetric
+// post-terminal delete on the step plugin).
 func buildTestRun(cfg *provider.PluginConfig, scriptCMName, scriptKey, namespace, crName string) *k6v1alpha1.TestRun {
 	// Default Parallelism=1 when unset (cfg.Parallelism == 0) per D-01 / Phase 08.2.
 	// k6-operator treats spec.Parallelism=0 as "paused" -- forwarding 0 would
@@ -180,7 +193,7 @@ func buildTestRun(cfg *provider.PluginConfig, scriptCMName, scriptKey, namespace
 				Env:   cfg.Env,
 			},
 			Arguments: strings.Join(cfg.Arguments, " "),
-			Cleanup:   "post",
+			// spec.Cleanup intentionally left unset -- see function doc.
 		},
 	}
 
