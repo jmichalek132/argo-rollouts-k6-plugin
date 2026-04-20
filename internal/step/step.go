@@ -40,6 +40,19 @@ type stepState struct {
 	TriggeredAt string `json:"triggeredAt"`
 	TestRunURL  string `json:"testRunURL"`
 	FinalStatus string `json:"finalStatus,omitempty"`
+	// CleanupDone is set to true after provider.Cleanup fires for a success-path
+	// terminal state (Passed/Failed/Errored). Prevents re-firing Cleanup on
+	// subsequent Run() invocations that may arrive during controller
+	// reconciliation races after the step has reached a terminal phase.
+	//
+	// Best-effort per GC-03: this flag flips to true even if the underlying
+	// Cleanup call returned an error -- no retry loops (REQUIREMENTS.md
+	// "Retry loop on cleanup failure" is explicitly Out of Scope).
+	//
+	// Backward compatible: the json:",omitempty" tag keeps serialized state
+	// compact for pre-v0.4.0 runs in flight during upgrade; an absent field
+	// deserializes as false, which is the correct default.
+	CleanupDone bool `json:"cleanupDone,omitempty"`
 }
 
 // K6StepPlugin implements the RpcStep interface for k6 step plugin.
@@ -186,6 +199,43 @@ func (k *K6StepPlugin) Run(rollout *v1alpha1.Rollout, ctx *types.RpcStepContext)
 		phase = types.PhaseFailed
 		state.FinalStatus = string(provider.Aborted)
 		message = "k6 run aborted"
+	}
+
+	// Success-path cleanup hook (GC-02).
+	// Fires on the FIRST observation of a success-path terminal state
+	// (Passed, Failed, Errored) and NEVER on Running, Aborted, or TimedOut:
+	//   - Running: run still in flight.
+	//   - Aborted: the Terminate/Abort RPC path already invoked StopRun via
+	//     stopActiveRun (D-07). On the k6-operator backend StopRun and Cleanup
+	//     share deleteCR, so firing Cleanup here would be a redundant
+	//     NotFound-as-success roundtrip.
+	//   - TimedOut: the timeout branch above returns early after calling
+	//     StopRun; it never reaches this point.
+	//
+	// Guarded by state.CleanupDone for once-per-terminal-transition semantics:
+	// Argo Rollouts may replay Run() during reconciliation even after a
+	// terminal result, and we must suppress repeat Cleanup fires.
+	//
+	// state.CleanupDone is set to true REGARDLESS of Cleanup outcome --
+	// best-effort per GC-03, no retry loops per REQUIREMENTS.md Out of Scope.
+	// Cleanup errors are logged at slog.Warn and do NOT alter result.Phase,
+	// result.Message, or the RpcError returned to the controller.
+	isSuccessPathTerminal := result.State == provider.Passed ||
+		result.State == provider.Failed ||
+		result.State == provider.Errored
+	if isSuccessPathTerminal && !state.CleanupDone && state.RunID != "" {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), providerCallTimeout)
+		if cleanupErr := k.provider.Cleanup(cleanupCtx, cfg, state.RunID); cleanupErr != nil {
+			slog.Warn("failed to cleanup run after terminal state",
+				"runId", state.RunID,
+				"rollout", cfg.RolloutName,
+				"namespace", cfg.Namespace,
+				"state", string(result.State),
+				"error", cleanupErr,
+			)
+		}
+		cleanupCancel()
+		state.CleanupDone = true
 	}
 
 	statusJSON, _ := json.Marshal(state)
