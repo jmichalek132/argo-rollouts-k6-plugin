@@ -303,8 +303,9 @@ func getTestRunParallelism(cfg *envconf.Config, namespace string) (string, error
 	return string(out), nil
 }
 
-// dumpK6OperatorDiagnostics prints TestRun, pod, and log state on failure to aid debugging.
-// Mirrors the timeout-dump pattern used by waitForAnalysisRun.
+// dumpK6OperatorDiagnostics prints TestRun, pod, AR/Rollout status, and controller
+// logs on failure to aid debugging. Mirrors the timeout-dump pattern used by
+// waitForAnalysisRun.
 func dumpK6OperatorDiagnostics(cfg *envconf.Config, namespace string) {
 	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
 		"get", "testruns", "-n", namespace, "-o", "yaml").Output(); err == nil {
@@ -317,5 +318,25 @@ func dumpK6OperatorDiagnostics(cfg *envconf.Config, namespace string) {
 	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
 		"get", "pods", "-n", namespace, "-o", "wide").Output(); err == nil {
 		fmt.Printf("=== All pods in %s (diagnostic dump) ===\n%s\n", namespace, string(out))
+	}
+	// AnalysisRun yaml -- exposes status.message where RpcError propagates.
+	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"get", "analysisruns", "-n", namespace, "-o", "yaml").Output(); err == nil {
+		fmt.Printf("=== AnalysisRuns in %s (diagnostic dump) ===\n%s\n", namespace, string(out))
+	}
+	// Rollout yaml -- exposes status.message/conditions.
+	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"get", "rollouts", "-n", namespace, "-o", "yaml").Output(); err == nil {
+		fmt.Printf("=== Rollouts in %s (diagnostic dump) ===\n%s\n", namespace, string(out))
+	}
+	// Argo-rollouts controller logs -- plugin stderr is piped here via go-plugin.
+	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"logs", "-n", "argo-rollouts", "deploy/argo-rollouts", "--tail=500").CombinedOutput(); err == nil {
+		fmt.Printf("=== argo-rollouts controller logs (tail 500) ===\n%s\n", string(out))
+	}
+	// k6-operator controller logs -- in case k6-operator rejects TestRuns.
+	if out, err := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"logs", "-n", "k6-operator-system", "deploy/k6-operator-controller-manager", "--tail=200").CombinedOutput(); err == nil {
+		fmt.Printf("=== k6-operator controller logs (tail 200) ===\n%s\n", string(out))
 	}
 }
