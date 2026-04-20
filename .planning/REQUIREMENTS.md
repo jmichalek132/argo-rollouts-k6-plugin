@@ -69,23 +69,24 @@ Explicitly excluded for v0.4.0 and beyond. Documented to prevent scope creep.
 
 ## Traceability
 
-Which phases cover which requirements. Populated by gsd-roadmapper in the next step.
+Which phases cover which requirements. Populated by gsd-roadmapper.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GC-01 | TBD | Pending |
-| GC-02 | TBD | Pending |
-| GC-03 | TBD | Pending |
-| GC-04 | TBD | Pending |
-| TEST-02 | TBD | Pending |
-| POLISH-01 | TBD | Pending |
-| POLISH-02 | TBD | Pending |
-| POLISH-03 | TBD | Pending |
+| GC-01 | Phase 11 | Pending |
+| GC-02 | Phase 11 | Pending |
+| GC-03 | Phase 11 | Pending |
+| GC-04 | Phase 11 | Pending |
+| TEST-02 | Phase 12 | Pending |
+| POLISH-01 | Phase 13 | Pending |
+| POLISH-02 | Phase 13 | Pending |
+| POLISH-03 | Phase 13 | Pending |
 
 **Coverage:**
 - v0.4.0 requirements: 8 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 8
+- Mapped to phases: 8 (Phase 11: 4, Phase 12: 1, Phase 13: 3)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-20 at v0.4.0 milestone start*
+*Traceability populated: 2026-04-20 at v0.4.0 roadmap creation*
