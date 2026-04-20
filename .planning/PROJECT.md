@@ -8,25 +8,21 @@ An open-source Argo Rollouts plugin written in Go that integrates k6 load testin
 
 Rollouts automatically pass or roll back based on real load test results — no manual gates, no guesswork.
 
-## Current Milestone: v0.3.0 In-Cluster Execution
-
-**Goal:** Enable k6 test execution inside the Kubernetes cluster and decouple script sourcing from Grafana Cloud test IDs.
-
-**Target features:**
-- ConfigMap script sourcing — k6 .js scripts loaded from Kubernetes ConfigMaps
-- Kubernetes Job provider — run k6 as a `batch/v1` Job in-cluster
-- k6-operator CRD support — trigger `TestRun` CRs for distributed k6 execution
-- Local binary execution research — investigate running k6 as a subprocess of the plugin process
-
 ## Current State
 
-Shipped **v0.2.0** on 2026-04-15. Phase 9 complete — k6-operator metric integration: handleSummary JSON parsing extracts p95, error rate, throughput from in-cluster runner pod logs. Metric plugin's successCondition evaluation works identically for k6-operator and Grafana Cloud providers.
+Shipped **v0.3.0 In-Cluster Execution** on 2026-04-20. k6-operator TestRun CRDs are now a fully supported execution backend alongside Grafana Cloud k6 — users get in-cluster distributed load tests gating canary/blue-green rollouts, with metric extraction from runner pod logs.
 
-- **Go LOC:** ~26,000+ across 100+ files
-- **Test coverage:** 110+ tests in operator package (all pass with -race)
-- **Binaries:** 8 platform variants (linux/darwin x amd64/arm64) via GoReleaser
-- **e2e:** 4 mock scenarios on kind cluster, CI verified passing
-- **Dependencies:** Renovate bot configured for Go modules and GitHub Actions; k6-operator v1.3.2 added
+- **Go LOC:** 8,913 across `internal/`, `e2e/`, `cmd/`
+- **Tests:** 237+ unit tests (5 packages), 6/6 e2e tests on kind cluster (PASS in 261s)
+- **Binaries:** 8 platform variants (linux/darwin × amd64/arm64) via GoReleaser
+- **Dependencies:** Renovate bot configured; `client-go` v0.34.1 promoted to direct dep; k6-operator v1.3.2 added as a dev/test dependency (not an import — plugin uses dynamic client)
+- **Known deferred:** success-path TestRun/pod cleanup (GarbageCollect hook) and combined step+metric+AR-deletion e2e — captured in Active below.
+
+Three decimal phases (08.1, 08.2, 08.3) were inserted during milestone execution to fix bugs surfaced by the e2e suite itself — metadata discarding, parallelism=0→paused, and TestRun-GC-before-Resume race. Each fix unblocked the next layer; final e2e after 08.3 was clean.
+
+## Next Milestone
+
+No milestone in progress. Candidates for next (in priority order): success-path TestRun cleanup (GarbageCollect), extended e2e coverage (combined canary + AR deletion), Kubernetes Job provider as a lighter-weight alternative to k6-operator for simple use cases.
 
 ## Requirements
 
@@ -44,19 +40,26 @@ Shipped **v0.2.0** on 2026-04-15. Phase 9 complete — k6-operator metric integr
 - ✓ Renovate bot for automated Go module and GitHub Actions dependency updates — v0.2.0 (Phase 6)
 - ✓ Provider routing between execution backends (grafana-cloud, k6-operator) — v0.3.0 (Phase 7)
 - ✓ In-cluster Kubernetes client with lazy init and ConfigMap script reading — v0.3.0 (Phase 7)
+- ✓ ConfigMap script sourcing: k6 .js script stored in a Kubernetes ConfigMap, referenced by name/key in plugin config — v0.3.0 (Phase 7)
+- ✓ k6-operator CRD support: TestRun CR lifecycle (Trigger/Get/Stop) via dynamic client, namespace targeting, parallelism, resource limits, custom runner image, env var injection — v0.3.0 (Phase 8)
+- ✓ AnalysisRun/Rollout metadata wiring through plugin layers with AR > Rollout > none owner-ref precedence — v0.3.0 (Phase 08.1)
+- ✓ `cfg.Parallelism=1` default in `buildTestRun` when unset (k6-operator treats 0 as paused) — v0.3.0 (Phase 08.2)
+- ✓ TestRun CR persists past terminal stage so plugin can read status (removed `spec.Cleanup=post`) — v0.3.0 (Phase 08.3)
+- ✓ k6-operator metric extraction: handleSummary JSON parsing from runner pod logs, metric parity with Grafana Cloud provider — v0.3.0 (Phase 9)
+- ✓ RBAC example + AnalysisTemplate/Rollout examples + kind-cluster e2e suite — v0.3.0 (Phase 10)
 
 ### Active
 
-- [ ] ConfigMap script sourcing: k6 .js script stored in a Kubernetes ConfigMap, referenced by name/key in plugin config
-- [ ] In-cluster k6 Job execution: KubernetesJobProvider creates `batch/v1` Jobs with k6 container
-- [x] k6-operator CRD support: trigger `TestRun` CRs via grafana/k6-operator for distributed execution — Validated in Phase 8
-- [x] k6-operator metric extraction: handleSummary JSON parsing from runner pod logs, metric parity with Grafana Cloud provider — Validated in Phase 9
-- [ ] Local binary execution research: investigate running k6 as a subprocess of the plugin process
+No active requirements. Next milestone not yet defined.
 
 ### Deferred
 
-- [ ] Step plugin secret handling: step plugin config has no secretKeyRef support; API tokens visible in Rollout spec and dashboard UI — upstream Argo Rollouts limitation
-- [ ] Custom k6 metric support (user-defined Counter/Gauge/Rate/Trend)
+- [ ] Success-path TestRun/pod cleanup: implement `GarbageCollect` on the metric plugin and a symmetric post-terminal hook on the step plugin so completed TestRun CRs and runner pods don't leak. `StopRun` already handles cancellation (Terminate/Abort). Deferred from v0.3.0 Phase 08.3 when `spec.Cleanup=post` was removed.
+- [ ] Extended e2e coverage: combined step+metric canary with mid-run AnalysisRun deletion to exercise D-07 owner-ref precedence under real Kubernetes GC cascade. Unit-tested; not e2e-tested.
+- [ ] In-cluster k6 Job execution: KubernetesJobProvider creates `batch/v1` Jobs with k6 container — lighter-weight alternative to k6-operator for single-pod runs.
+- [ ] Local binary execution research: investigate running k6 as a subprocess of the plugin process — flagged as risky in v0.3.0 (grafana/k6#3744 re: stdout protocol corruption).
+- [ ] Step plugin secret handling: step plugin config has no `secretKeyRef` support; API tokens visible in Rollout spec and dashboard UI — upstream Argo Rollouts limitation.
+- [ ] Custom k6 metric support (user-defined Counter/Gauge/Rate/Trend).
 
 ### Out of Scope
 
@@ -97,6 +100,13 @@ Shipped **v0.2.0** on 2026-04-15. Phase 9 complete — k6-operator metric integr
 | ConfigMap script sourcing in v2 | Grafana Cloud test ID covers immediate need | — Deferred as planned |
 | No custom metrics/tracing | Plugin is subprocess, Argo Rollouts covers outcomes, go-plugin has no OTel support | ✓ Good — structured slog with runId correlation is sufficient |
 | Canary example uses independent k6 runs | No run ID handoff between step and metric plugins | ✓ Good — simpler, avoids coupling |
+| Dynamic client (unstructured) for TestRun CRD | Avoid importing controller-runtime; keeps plugin dep tree small and scoped | ✓ Good — v0.3.0 shipped without controller-runtime |
+| Pod exit codes for pass/fail (k6-operator #577 workaround) | k6-operator doesn't surface threshold-violation signal in CR status | ✓ Good — deterministic, no false positives |
+| `handleSummary` JSON from pod logs for metric extraction | No sidecar, no extra CR, same metrics as Grafana Cloud provider | ✓ Good — `internal/provider/operator/summary.go` shipped in Phase 9 |
+| PluginConfig field defaults live at consumer site (builder fn), not parseConfig or validation | Preserves "0 means unset" at the boundary; keeps builders pure (no slog, no cfg mutation) | ✓ Good — v0.3.0 Phase 08.2 ratified this pattern |
+| e2e regression guards read back emitted CRs via `kubectl jsonpath` | Higher signal than Rollout-Healthy inference | ✓ Good — caught both 08.2 and 08.3 regressions reliably |
+| Do NOT set `spec.Cleanup` on TestRun CRs | k6-operator v1.3.x `Cleanup=post` cascade-deletes CRs before plugin can observe terminal state | ✓ Good — v0.3.0 Phase 08.3 removed; success-path cleanup deferred to proper GarbageCollect hook |
+| argo-rollouts controller logs are authoritative source of plugin stderr | go-plugin pipes binary stderr into controller log stream; diagnostic harness must capture it | ✓ Good — enshrined in e2e `dumpK6OperatorDiagnostics` after 08.3 debugging |
 
 ## Evolution
 
@@ -116,4 +126,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-16 after Phase 8 completion*
+*Last updated: 2026-04-20 after v0.3.0 milestone completion.*

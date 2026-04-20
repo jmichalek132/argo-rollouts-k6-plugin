@@ -1,5 +1,28 @@
 # Milestones
 
+## v0.3.0 In-Cluster Execution (Shipped: 2026-04-20)
+
+**Phases completed:** 7 phases (7, 8, 08.1, 08.2, 08.3, 9, 10), 13 plans.
+**Timeline:** 2026-04-15 → 2026-04-20 (5 days).
+**Git stats:** ~99 commits scoped to v0.3.0, 8,913 total Go LOC.
+
+**Key accomplishments:**
+
+- Provider routing via Router multiplexer + lazy in-cluster k8s client (`sync.Once`) + ConfigMap script sourcing — grafana-cloud-only deployments never touch the k8s API (Phase 7).
+- k6-operator TestRun CRD lifecycle (TriggerRun/GetRunResult/StopRun) via dynamic client; pass/fail from runner pod exit codes (workaround for k6-operator#577); TestRun naming and `managed-by` labels (Phase 8).
+- Metadata wiring through plugin layers: `cfg.Namespace`/`RolloutName`/`AnalysisRunUID`/`RolloutUID` flow from AnalysisRun/Rollout ObjectMeta through metric.go and step.go before dispatch; owner-ref precedence AR > Rollout > none in `parentOwnerRef` (Phase 08.1, inserted).
+- `cfg.Parallelism=1` default in `buildTestRun` (Phase 08.2, inserted) — unblocked TestRuns that k6-operator was interpreting as `paused` when users omitted `parallelism`.
+- Removed `spec.Cleanup=post` from buildTestRun (Phase 08.3, inserted retroactively) — k6-operator was cascade-deleting TestRun CRs before the plugin's Resume poll could read terminal status; 10s race dropped to zero.
+- `handleSummary` JSON extraction from runner pod logs for metric plugin — same `successCondition` expressions work across grafana-cloud and k6-operator providers (Phase 9).
+- RBAC example ClusterRole + AnalysisTemplate/Rollout example YAML + kind-cluster e2e suite with mock k6 API server; final e2e run 6/6 PASS, 261s (Phase 10).
+
+**Deferred (tech debt):**
+
+- Success-path TestRun/pod cleanup via `GarbageCollect` on metric plugin and symmetric post-terminal hook on step plugin. Cancellation paths (Terminate/Abort) still clean up correctly via `StopRun`.
+- e2e coverage for combined step+metric canary with mid-run AnalysisRun deletion (D-07 owner-ref precedence under real Kubernetes GC cascade). Unit-tested; not e2e-tested.
+
+---
+
 ## v0.2.0 Hardening (Shipped: 2026-04-14)
 
 **Phases completed:** 2 phases, 2 plans, 2 tasks

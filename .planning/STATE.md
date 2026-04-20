@@ -1,36 +1,35 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3.0
-milestone_name: In-Cluster Execution
-status: executing
-stopped_at: Phase 08.3 plan 01 complete (TestRun GC race fixed)
-last_updated: "2026-04-20T10:00:00Z"
-last_activity: 2026-04-20 -- Phase 08.3 retroactive — removed spec.Cleanup=post; both k6-operator e2e tests pass
+milestone: none
+milestone_name: (between milestones — v0.3.0 shipped 2026-04-20)
+status: idle
+stopped_at: v0.3.0 milestone shipped and archived
+last_updated: "2026-04-20T10:35:00Z"
+last_activity: 2026-04-20 -- v0.3.0 In-Cluster Execution milestone shipped; archived to milestones/v0.3.0-*.md; tagged v0.3.0
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-15)
+See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Phase 08.3 complete — k6-operator e2e suite fully passing.
+**Current focus:** Between milestones. v0.3.0 shipped. Next milestone not yet defined — run `/gsd-new-milestone` to start planning.
 
 ## Current Position
 
-Phase: 08.3 (remove-spec-cleanup-post-testrun-gc-d-before-plugin-can-read) — COMPLETE
-Plan: 1 of 1 complete
-Status: Phase 08.3 shipped retroactively; k6-operator e2e tests pass; full `make test-e2e` pending final verification
-Last activity: 2026-04-20 -- Phase 08.3 plan 01 complete (spec.Cleanup=post removed; TestRun no longer GC'd before plugin reads status)
+Milestone: none (v0.3.0 shipped 2026-04-20)
+Last activity: 2026-04-20 -- v0.3.0 milestone archived and tagged
+Next step: `/gsd-new-milestone` (candidates: success-path TestRun cleanup via GarbageCollect, extended e2e coverage, Kubernetes Job provider)
 
-Progress: [██████████] 100%
+Progress: n/a (no active milestone)
 
 ## Performance Metrics
 
