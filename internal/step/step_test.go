@@ -433,6 +433,244 @@ func TestRun_Terminal_Aborted(t *testing.T) {
 	assert.Equal(t, "Aborted", state.FinalStatus)
 }
 
+// --- Run: success-path terminal-state cleanup hook (GC-02 / GC-03 / GC-04(c,d)) ---
+
+// makeStateWithCleanup builds a serialized stepState Status blob with a specific
+// CleanupDone value, used by tests that exercise the once-per-transition guard
+// without disturbing the existing makeState helper (preserves all older tests).
+func makeStateWithCleanup(runID, triggeredAt string, cleanupDone bool) json.RawMessage {
+	s := stepState{
+		RunID:       runID,
+		TriggeredAt: triggeredAt,
+		CleanupDone: cleanupDone,
+	}
+	raw, _ := json.Marshal(s)
+	return raw
+}
+
+func TestRun_TerminalPassed_FiresCleanupOnce(t *testing.T) {
+	cleanupCalls := 0
+	var gotRunID string
+	var gotCfgRolloutName string
+	mock := &mockProvider{
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Passed,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+		CleanupFn: func(_ context.Context, cfg *provider.PluginConfig, runID string) error {
+			cleanupCalls++
+			gotRunID = runID
+			gotCfgRolloutName = cfg.RolloutName
+			return nil
+		},
+	}
+	p := New(mock)
+	rollout := testRollout("my-app", "ns-prod", "rollout-uid-1")
+	triggeredAt := time.Now().UTC().Format(time.RFC3339)
+	status := makeState("run-1", triggeredAt)
+	ctx := makeContext(makeConfig(nil), status)
+	result, rpcErr := p.Run(rollout, ctx)
+
+	assert.False(t, rpcErr.HasError())
+	assert.Equal(t, types.PhaseSuccessful, result.Phase, "Passed must still map to PhaseSuccessful")
+	assert.Equal(t, 1, cleanupCalls, "Cleanup must fire exactly once on terminal Passed")
+	assert.Equal(t, "run-1", gotRunID, "Cleanup must receive the state.RunID")
+	assert.Equal(t, "my-app", gotCfgRolloutName, "Cleanup must receive a populateFromRollout-populated cfg")
+
+	var state stepState
+	require.NoError(t, json.Unmarshal(result.Status, &state))
+	assert.True(t, state.CleanupDone, "state.CleanupDone must be true after Cleanup fires")
+	assert.Equal(t, "Passed", state.FinalStatus, "FinalStatus must still be Passed")
+}
+
+func TestRun_TerminalFailed_FiresCleanupOnce(t *testing.T) {
+	cleanupCalls := 0
+	mock := &mockProvider{
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Failed,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCalls++
+			return nil
+		},
+	}
+	p := New(mock)
+	triggeredAt := time.Now().UTC().Format(time.RFC3339)
+	status := makeState("run-1", triggeredAt)
+	ctx := makeContext(makeConfig(nil), status)
+	result, rpcErr := p.Run(nil, ctx)
+
+	assert.False(t, rpcErr.HasError())
+	assert.Equal(t, types.PhaseFailed, result.Phase, "Failed must still map to PhaseFailed")
+	assert.Equal(t, 1, cleanupCalls, "Cleanup must fire exactly once on terminal Failed")
+
+	var state stepState
+	require.NoError(t, json.Unmarshal(result.Status, &state))
+	assert.True(t, state.CleanupDone, "state.CleanupDone must be true after Cleanup fires")
+	assert.Equal(t, "Failed", state.FinalStatus)
+}
+
+func TestRun_TerminalErrored_FiresCleanupOnce(t *testing.T) {
+	cleanupCalls := 0
+	mock := &mockProvider{
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Errored,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCalls++
+			return nil
+		},
+	}
+	p := New(mock)
+	triggeredAt := time.Now().UTC().Format(time.RFC3339)
+	status := makeState("run-1", triggeredAt)
+	ctx := makeContext(makeConfig(nil), status)
+	result, rpcErr := p.Run(nil, ctx)
+
+	assert.False(t, rpcErr.HasError())
+	assert.Equal(t, types.PhaseFailed, result.Phase, "Errored must map to PhaseFailed")
+	assert.Contains(t, result.Message, "errored")
+	assert.Equal(t, 1, cleanupCalls, "Cleanup must fire exactly once on terminal Errored")
+
+	var state stepState
+	require.NoError(t, json.Unmarshal(result.Status, &state))
+	assert.True(t, state.CleanupDone, "state.CleanupDone must be true after Cleanup fires")
+	assert.Equal(t, "Errored", state.FinalStatus)
+}
+
+func TestRun_TerminalAborted_DoesNotFireCleanup(t *testing.T) {
+	cleanupCalls := 0
+	mock := &mockProvider{
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Aborted,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCalls++
+			return nil
+		},
+	}
+	p := New(mock)
+	triggeredAt := time.Now().UTC().Format(time.RFC3339)
+	status := makeState("run-1", triggeredAt)
+	ctx := makeContext(makeConfig(nil), status)
+	result, rpcErr := p.Run(nil, ctx)
+
+	assert.False(t, rpcErr.HasError())
+	assert.Equal(t, types.PhaseFailed, result.Phase)
+	assert.Contains(t, result.Message, "aborted")
+	assert.Equal(t, 0, cleanupCalls,
+		"Cleanup must NOT fire on Aborted -- Terminate/Abort RPCs already handled CR deletion via StopRun (D-07)")
+
+	var state stepState
+	require.NoError(t, json.Unmarshal(result.Status, &state))
+	assert.False(t, state.CleanupDone, "state.CleanupDone must remain false when Cleanup does not fire")
+}
+
+func TestRun_Running_DoesNotFireCleanup(t *testing.T) {
+	cleanupCalls := 0
+	mock := &mockProvider{
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Running,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCalls++
+			return nil
+		},
+	}
+	p := New(mock)
+	triggeredAt := time.Now().UTC().Format(time.RFC3339)
+	status := makeState("run-1", triggeredAt)
+	ctx := makeContext(makeConfig(nil), status)
+	result, rpcErr := p.Run(nil, ctx)
+
+	assert.False(t, rpcErr.HasError())
+	assert.Equal(t, types.PhaseRunning, result.Phase)
+	assert.Equal(t, 15*time.Second, result.RequeueAfter)
+	assert.Equal(t, 0, cleanupCalls, "Cleanup must NOT fire while the run is still in flight (Running)")
+
+	var state stepState
+	require.NoError(t, json.Unmarshal(result.Status, &state))
+	assert.False(t, state.CleanupDone, "state.CleanupDone must remain false while Running")
+}
+
+func TestRun_CleanupDoneGuardPreventsDoubleFire(t *testing.T) {
+	cleanupCalls := 0
+	mock := &mockProvider{
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Passed,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCalls++
+			return nil
+		},
+	}
+	p := New(mock)
+	triggeredAt := time.Now().UTC().Format(time.RFC3339)
+	// Simulate a replay Run() call after cleanup already fired on a prior terminal observation.
+	status := makeStateWithCleanup("run-1", triggeredAt, true)
+	ctx := makeContext(makeConfig(nil), status)
+	result, rpcErr := p.Run(nil, ctx)
+
+	assert.False(t, rpcErr.HasError())
+	assert.Equal(t, types.PhaseSuccessful, result.Phase, "replay Run() must still report terminal PhaseSuccessful")
+	assert.Equal(t, 0, cleanupCalls,
+		"CleanupDone guard must suppress a second Cleanup fire on controller reconciliation replay")
+
+	var state stepState
+	require.NoError(t, json.Unmarshal(result.Status, &state))
+	assert.True(t, state.CleanupDone, "state.CleanupDone must remain true across the replay")
+}
+
+func TestRun_CleanupError_DoesNotChangePhaseAndSetsCleanupDone(t *testing.T) {
+	cleanupCalls := 0
+	mock := &mockProvider{
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Passed,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+		CleanupFn: func(_ context.Context, _ *provider.PluginConfig, _ string) error {
+			cleanupCalls++
+			return fmt.Errorf("k8s api unavailable")
+		},
+	}
+	p := New(mock)
+	triggeredAt := time.Now().UTC().Format(time.RFC3339)
+	status := makeState("run-1", triggeredAt)
+	ctx := makeContext(makeConfig(nil), status)
+	result, rpcErr := p.Run(nil, ctx)
+
+	assert.False(t, rpcErr.HasError(),
+		"Cleanup errors must not surface as RpcError (GC-03 best-effort contract)")
+	assert.Equal(t, types.PhaseSuccessful, result.Phase,
+		"Cleanup errors must NOT alter result.Phase (GC-03)")
+	assert.Equal(t, 1, cleanupCalls, "Cleanup must be attempted exactly once, no retry")
+
+	var state stepState
+	require.NoError(t, json.Unmarshal(result.Status, &state))
+	assert.True(t, state.CleanupDone,
+		"state.CleanupDone must be true even on Cleanup error (best-effort, no retry loop)")
+	assert.Equal(t, "Passed", state.FinalStatus, "FinalStatus must be preserved on Cleanup error")
+}
+
 // --- Run: timeout (D-01, D-02) ---
 
 func TestRun_Timeout(t *testing.T) {
