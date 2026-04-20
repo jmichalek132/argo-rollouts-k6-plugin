@@ -380,7 +380,37 @@ func (p *K6OperatorProvider) GetRunResult(ctx context.Context, cfg *provider.Plu
 // Decodes runID to recover namespace, GVR, and CR name (addresses HIGH review concern
 // about lifecycle identity). Treats NotFound as success for idempotent abort paths
 // (addresses HIGH review concern about idempotent delete).
-func (p *K6OperatorProvider) StopRun(ctx context.Context, cfg *provider.PluginConfig, runID string) error {
+//
+// Delegates to the shared deleteCR helper with source="stop" to distinguish this
+// cancel-path delete from the success-path Cleanup delete in controller logs.
+func (p *K6OperatorProvider) StopRun(ctx context.Context, _ *provider.PluginConfig, runID string) error {
+	return p.deleteCR(ctx, runID, "stop")
+}
+
+// Cleanup releases the TestRun or PrivateLoadZone CR for a run that has reached
+// a terminal state. Called by K6MetricProvider.GarbageCollect (and the step
+// plugin's terminal-state hook in Phase 11-02) for each runID stored in
+// measurement metadata.
+//
+// Idempotent: NotFound is treated as success (the CR may already have been
+// reaped by k6-operator, by an earlier Cleanup pass, or by StopRun on a
+// cancelled run). Delegates to the shared deleteCR helper with source="cleanup"
+// to distinguish this delete from StopRun deletes in controller logs.
+//
+// Semantically distinct from StopRun ("cancel an in-flight run"); see Provider
+// interface Godoc for the rationale behind the two-method split.
+func (p *K6OperatorProvider) Cleanup(ctx context.Context, _ *provider.PluginConfig, runID string) error {
+	return p.deleteCR(ctx, runID, "cleanup")
+}
+
+// deleteCR deletes a TestRun or PrivateLoadZone CR via the dynamic client.
+// Treats k8serrors.IsNotFound as success (idempotent). Shared between StopRun
+// (cancel path, source="stop") and Cleanup (success-path GC, source="cleanup").
+//
+// The source field is a structured log key that lets operators grep controller
+// logs for cancel-vs-cleanup deletes without recovering the call site from the
+// stack trace -- useful when diagnosing runaway GC or missed cancels.
+func (p *K6OperatorProvider) deleteCR(ctx context.Context, runID, source string) error {
 	// Decode lifecycle identity from runID (addresses HIGH review concern).
 	ns, resource, name, err := decodeRunID(runID)
 	if err != nil {
@@ -394,7 +424,7 @@ func (p *K6OperatorProvider) StopRun(ctx context.Context, cfg *provider.PluginCo
 	}
 
 	// Delete the CR (per D-08).
-	// Addresses HIGH review concern: NotFound treated as success for idempotent abort paths.
+	// NotFound treated as success for idempotent abort and cleanup paths.
 	err = dynClient.Resource(gvr).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -402,6 +432,7 @@ func (p *K6OperatorProvider) StopRun(ctx context.Context, cfg *provider.PluginCo
 				"name", name,
 				"namespace", ns,
 				"resource", resource,
+				"source", source,
 				"provider", p.Name(),
 			)
 			return nil
@@ -413,6 +444,7 @@ func (p *K6OperatorProvider) StopRun(ctx context.Context, cfg *provider.PluginCo
 		"name", name,
 		"namespace", ns,
 		"resource", resource,
+		"source", source,
 		"provider", p.Name(),
 	)
 	return nil

@@ -51,6 +51,18 @@ type Provider interface {
 	// No-op if the run is already in a terminal state.
 	StopRun(ctx context.Context, cfg *PluginConfig, runID string) error
 
+	// Cleanup releases any backend resources associated with a terminal run.
+	// Called by K6MetricProvider.GarbageCollect for each runID present in
+	// ar.Status.MetricResults[*].Measurements[*].Metadata["runId"] when the
+	// Argo Rollouts analysis controller trims measurements past its retention
+	// limit. Idempotent: NotFound / already-cleaned-up MUST return nil.
+	//
+	// Distinct from StopRun (which means "cancel an in-flight run"):
+	// semantically, Cleanup means "release resources after a terminal state."
+	// On the k6-operator backend they happen to share the delete code path
+	// today; future providers may differentiate.
+	Cleanup(ctx context.Context, cfg *PluginConfig, runID string) error
+
 	// Name returns the provider identifier for logging.
 	Name() string
 }

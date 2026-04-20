@@ -93,6 +93,21 @@ func (r *Router) StopRun(ctx context.Context, cfg *PluginConfig, runID string) e
 	return p.StopRun(ctx, cfg, runID)
 }
 
+// Cleanup dispatches to the resolved provider.
+//
+// Called by K6MetricProvider.GarbageCollect (and the step plugin's terminal-state
+// hook in Phase 11-02) once per runID stored in measurement metadata. The
+// resolved provider decides whether cleanup is a real delete (k6-operator) or
+// a no-op (grafana-cloud -- Cloud API retains runs server-side).
+func (r *Router) Cleanup(ctx context.Context, cfg *PluginConfig, runID string) error {
+	p, err := r.resolve(cfg)
+	if err != nil {
+		return err
+	}
+	slog.Debug("routing Cleanup", "provider", p.Name(), "runID", runID)
+	return p.Cleanup(ctx, cfg, runID)
+}
+
 // Name returns "router" for the interface contract.
 // Individual dispatch calls log the resolved provider name via p.Name().
 func (r *Router) Name() string {

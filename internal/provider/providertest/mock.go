@@ -15,6 +15,7 @@ type MockProvider struct {
 	TriggerRunFn   func(ctx context.Context, cfg *provider.PluginConfig) (string, error)
 	GetRunResultFn func(ctx context.Context, cfg *provider.PluginConfig, runID string) (*provider.RunResult, error)
 	StopRunFn      func(ctx context.Context, cfg *provider.PluginConfig, runID string) error
+	CleanupFn      func(ctx context.Context, cfg *provider.PluginConfig, runID string) error
 }
 
 func (m *MockProvider) Name() string { return "mock" }
@@ -36,6 +37,13 @@ func (m *MockProvider) GetRunResult(ctx context.Context, cfg *provider.PluginCon
 func (m *MockProvider) StopRun(ctx context.Context, cfg *provider.PluginConfig, runID string) error {
 	if m.StopRunFn != nil {
 		return m.StopRunFn(ctx, cfg, runID)
+	}
+	return nil
+}
+
+func (m *MockProvider) Cleanup(ctx context.Context, cfg *provider.PluginConfig, runID string) error {
+	if m.CleanupFn != nil {
+		return m.CleanupFn(ctx, cfg, runID)
 	}
 	return nil
 }

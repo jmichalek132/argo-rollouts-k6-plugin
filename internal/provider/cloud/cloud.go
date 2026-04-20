@@ -217,3 +217,18 @@ func (p *GrafanaCloudProvider) StopRun(ctx context.Context, cfg *provider.Plugin
 	)
 	return nil
 }
+
+// Cleanup is a no-op for Grafana Cloud. The Cloud API retains completed
+// runs server-side (users view historical runs via the Grafana dashboard);
+// the plugin has no client-side resources to release.
+//
+// Logged at slog.Debug (not Info) to avoid log spam in the common case --
+// GarbageCollect is called by the Argo Rollouts controller on every
+// measurement-retention overflow, which is many times per AnalysisRun.
+func (p *GrafanaCloudProvider) Cleanup(_ context.Context, _ *provider.PluginConfig, runID string) error {
+	slog.Debug("cleanup is a no-op for grafana-cloud",
+		"runId", runID,
+		"provider", p.Name(),
+	)
+	return nil
+}
