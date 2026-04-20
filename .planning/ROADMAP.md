@@ -53,7 +53,7 @@ Full details: [milestones/v0.3.0-ROADMAP.md](milestones/v0.3.0-ROADMAP.md)
 ### 🚧 v0.4.0 Cleanup (In Progress)
 
 - [x] **Phase 11: Success-path TestRun cleanup** — metric plugin `GarbageCollect` + symmetric step plugin terminal-state hook delete k6-operator TestRun CRs created during successful analysis/step runs (GC-01, GC-02, GC-03, GC-04) — **completed 2026-04-20**
-- [ ] **Phase 12: Combined canary e2e + owner-ref GC cascade** — new e2e `TestK6OperatorCombinedCanaryARDeletion` proves D-07 owner-ref precedence under real kube-apiserver garbage collection (TEST-02)
+- [x] **Phase 12: Combined canary e2e + owner-ref GC cascade** — new e2e `TestK6OperatorCombinedCanaryARDeletion` proves D-07 owner-ref precedence under real kube-apiserver garbage collection (TEST-02) — **completed 2026-04-20**
 - [ ] **Phase 13: Opportunistic polish** — `buildTestRun` Godoc consolidation, `dumpK6OperatorDiagnostics` helper extraction, 3 INFO items from 08.1-REVIEW.md (POLISH-01, POLISH-02, POLISH-03)
 
 ## Phase Details
@@ -82,8 +82,8 @@ Full details: [milestones/v0.3.0-ROADMAP.md](milestones/v0.3.0-ROADMAP.md)
   2. While both TestRun CRs are in `Running` stage, the test issues `kubectl delete analysisrun <name>` and the AR-owned TestRun disappears from `kubectl get testruns` within the reconcile window (kube-apiserver cascading GC via AnalysisRun OwnerReference).
   3. The Rollout-owned step TestRun survives the AR deletion and is still observable with `managed-by=argo-rollouts-k6-plugin` label.
   4. Test runs green in CI (`make test-e2e` green, 7/7 tests PASS including the new case) with diagnostic dumps on failure (builds on `dumpK6OperatorDiagnostics`).
-**Plans**: TBD
-  - [ ] 12-01-PLAN.md -- Combined-canary e2e test + testdata (Rollout with step+AnalysisTemplate, ConfigMap script, mock target service); kubectl jsonpath regression guards on both TestRuns' presence/absence post-AR-deletion; diagnostic dumps on failure
+**Plans**: 1/1 complete
+  - [x] 12-01-PLAN.md -- Combined-canary e2e test + testdata (Rollout with step plugin + background AnalysisTemplate, long-duration ConfigMap script); owner-ref-aware regression guards on AR-owned vs Rollout-owned TestRuns post-AR-deletion; diagnostic dumps on failure — **completed 2026-04-20** ([12-01-SUMMARY.md](./phases/12-combined-canary-e2e-owner-ref-gc-cascade/12-01-SUMMARY.md))
 
 ### Phase 13: Opportunistic polish
 
@@ -112,12 +112,12 @@ Run `/gsd-new-milestone` to start planning the next milestone.
 | v1.0 MVP | 1-4 | 9/9 | Complete | 2026-04-14 |
 | v0.2.0 Hardening | 5-6 | 2/2 | Complete | 2026-04-15 |
 | v0.3.0 In-Cluster Execution | 7-10 + 08.1/08.2/08.3 | 13/13 | Complete | 2026-04-20 |
-| v0.4.0 Cleanup | 11-13 | 2/4 | In progress | - |
+| v0.4.0 Cleanup | 11-13 | 3/4 | In progress | - |
 
 ### v0.4.0 Phase Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 11. Success-path TestRun cleanup | 2/2 | Complete | 2026-04-20 |
-| 12. Combined canary e2e + owner-ref GC cascade | 0/1 | Not started | - |
+| 12. Combined canary e2e + owner-ref GC cascade | 1/1 | Complete | 2026-04-20 |
 | 13. Opportunistic polish | 0/1 | Not started | - |

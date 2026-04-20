@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.4.0
 milestone_name: Cleanup
 status: executing
-stopped_at: Phase 11 complete (2/2 plans) -- success-path cleanup shipped for both metric and step plugins
-last_updated: "2026-04-20T12:58:55Z"
-last_activity: 2026-04-20 -- Phase 11 plan 11-02 complete (stepState.CleanupDone + K6StepPlugin.Run terminal-state cleanup hook; 256 tests PASS, +7 new; lint green). Phase 11 now 2/2 plans done. Next: Phase 12 combined-canary e2e.
+stopped_at: Phase 12 complete (1/1 plan) -- combined-canary e2e landed green; D-07 owner-ref precedence proven under real kube cascade GC
+last_updated: "2026-04-20T16:56:00Z"
+last_activity: 2026-04-20 -- Phase 12 plan 12-01 complete (TestK6OperatorCombinedCanaryARDeletion + 4 helpers + 2 testdata fixtures; 7/7 e2e PASS incl new 43.28s; lint green; zero internal/ changes). Phase 12 now 1/1 plan done. Next: Phase 13 opportunistic polish.
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -21,35 +21,36 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Phase 11 — Success-path TestRun cleanup (GC-01..GC-04). Sequential execution: 11-01 done (metric plugin GarbageCollect + Provider.Cleanup interface); 11-02 next (step terminal-state cleanup hook, compile-depends on 11-01).
+**Current focus:** Phase 12 complete. D-07 owner-ref precedence (AR > Rollout) now has both unit-level (Phase 08.1) and e2e-level (12-01) coverage against real kube-apiserver cascading GC. Next: Phase 13 opportunistic polish (POLISH-01/02/03).
 
 ## Current Position
 
 Milestone: v0.4.0 Cleanup
-Phase: 11 (success-path-testrun-cleanup) — COMPLETE (2/2 plans)
-Plan: All plans done. Next phase: 12 combined-canary e2e.
-Status: Phase 11 complete. Ready to start Phase 12.
-Last activity: 2026-04-20 -- Plan 11-02 complete (commit f4bd93d)
+Phase: 12 (combined-canary-e2e-owner-ref-gc-cascade) — COMPLETE (1/1 plan)
+Plan: All plans done. Next phase: 13 opportunistic polish.
+Status: Phase 12 complete. Ready to start Phase 13.
+Last activity: 2026-04-20 -- Plan 12-01 complete (commit 9819bf2)
 
-Progress: [█████░░░░░] 50%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
 **Velocity (from v1.0 + v0.2.0 + v0.3.0 + v0.4.0 so far):**
 
-- Total plans completed: 19
+- Total plans completed: 20
 - Average duration: ~4.7 min/plan
-- Total execution time: ~74 min
+- Total execution time: ~80 min
 
 **Recent Trend:**
 
-- Last 5 plans: 3min, 1min, 11min, 26min, 3min (11-02: narrow 2-file step plugin hook + 7 tests; TDD RED/GREEN clean, no deviations)
-- Trend: Stable (11-02 at 3min — scope-matched: 2 files, 2 tasks, no refactor)
+- Last 5 plans: 1min, 11min, 26min, 3min, 6min (12-01: 1 e2e test + 4 helpers + 2 testdata YAMLs; passed on first execution, no deviations)
+- Trend: Stable (12-01 at 6min — dominated by e2e wall-clock; the new test itself was 43s of the 324s suite runtime)
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | 11-01 | 26 min | 3 | 11 |
 | 11-02 | 3 min | 2 | 2 |
+| 12-01 | 6 min | 1 | 3 |
 
 ## Accumulated Context
 
@@ -71,6 +72,10 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 11-02]: stepState gains a separate CleanupDone bool field rather than reusing FinalStatus. FinalStatus is set in the SAME Run() call BEFORE the cleanup hook fires, so a FinalStatus!="" check would skip cleanup on the very first terminal observation. A distinct boolean flag fires cleanup on the first terminal observation and suppresses it only on subsequent reconciliation replays.
 - [Phase 11-02]: Step plugin terminal-state hook lives inside Run() post-switch, not in a separate method. Run() is Argo Rollouts' state-transition observation point (D-04: invoked repeatedly until terminal); the first terminal observation is the natural trigger. Aborted is excluded (Terminate/Abort RPCs already fired StopRun via D-07); TimedOut is excluded (timeout branch already calls StopRun and returns early).
 - [Phase 11-02]: CleanupDone=true set regardless of Cleanup outcome -- best-effort per GC-03. REQUIREMENTS.md explicitly lists "Retry loop on cleanup failure" as Out of Scope. Single attempt, log warning, move on.
+- [Phase 12-01]: Use canary.analysis background block with `startingStep: 1`, NOT a dedicated analysis step. Dedicated step would sequence the step plugin and AR -- step plugin's 120s script would fully complete before the AR even starts, breaking the "both TestRuns concurrent" premise the cascade assertion depends on. Background analysis launches the AR at the same canary step index, giving simultaneous CR existence.
+- [Phase 12-01]: Wait for stage `started` (k6-operator v1.3.x enum), not `running`. There is no `running` literal in k6-operator's stage enum (initialization, initialized, created, started, stopped, finished, error). An earlier draft's `"running"` guard would have silently timed out. Fatal-on-timeout on the pre-delete stage gate prevents proceeding with an inconclusive cascade assertion.
+- [Phase 12-01]: Capture the AR name BEFORE the delete; filter the cascade poll by the captured name. Argo Rollouts' `reconcileBackgroundAnalysisRun` recreates deleted background ARs, spawning a new AR-owned TestRun. Without filtering, the new TestRun would be counted as "old TestRun still present" and the assertion would false-fail. Filtering by captured name scopes the assertion to exactly the cascade under test.
+- [Phase 12-01]: Parse `ownerReferences` via Go struct unmarshal (`encoding/json`) rather than kubectl jsonpath. jsonpath cannot conditionally filter `ownerReferences[].kind` cleanly; struct-based parsing is simpler, case-sensitive, and mirrors the getAnalysisRunMetricValue precedent in the same file.
 
 ### Pending Todos
 
@@ -94,6 +99,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-20T12:58:55Z
-Stopped at: Phase 11 complete (2/2 plans) -- step plugin terminal-state cleanup hook shipped
-Resume file: .planning/phases/11-success-path-testrun-cleanup/11-02-SUMMARY.md
+Last session: 2026-04-20T16:56:00Z
+Stopped at: Phase 12 complete (1/1 plan) -- combined-canary e2e landed; D-07 owner-ref cascade proven under real kube GC
+Resume file: .planning/phases/12-combined-canary-e2e-owner-ref-gc-cascade/12-01-SUMMARY.md

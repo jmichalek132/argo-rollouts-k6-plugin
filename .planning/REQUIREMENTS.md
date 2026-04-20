@@ -21,10 +21,10 @@ Three requirement groups, each mapped to roadmap phases.
 
 ### Testing (E2E coverage for owner-ref GC)
 
-- [ ] **TEST-02**: New e2e test `TestK6OperatorCombinedCanaryARDeletion` in `e2e/k6_operator_test.go` — creates a Rollout that runs BOTH a step plugin AND a metric plugin (via AnalysisTemplate reference) simultaneously. During the run, deletes the AnalysisRun (via `kubectl delete analysisrun ...`). Asserts:
+- [x] **TEST-02**: New e2e test `TestK6OperatorCombinedCanaryARDeletion` in `e2e/k6_operator_test.go` — creates a Rollout that runs BOTH a step plugin AND a metric plugin (via AnalysisTemplate reference) simultaneously. During the run, deletes the AnalysisRun (via `kubectl delete analysisrun ...`). Asserts:
   - Metric-plugin-created TestRun CR is GC'd by kube-apiserver (AR owner ref) — `kubectl get testruns` shows it gone within reconcile window
   - Step-plugin-created TestRun CR survives (Rollout owner ref)
-  - Proves D-07 precedence (AR > Rollout) under real Kubernetes cascading GC, not just unit-level OwnerReference construction
+  - Proves D-07 precedence (AR > Rollout) under real Kubernetes cascading GC, not just unit-level OwnerReference construction — **Complete 2026-04-20 (12-01)**
 
 ### Polish (Opportunistic cleanup)
 
@@ -77,7 +77,7 @@ Which phases cover which requirements. Populated by gsd-roadmapper.
 | GC-02 | Phase 11 | Complete (11-02, 2026-04-20) |
 | GC-03 | Phase 11 | Complete (11-01 metric-side + 11-02 step-side, 2026-04-20) |
 | GC-04 | Phase 11 | Complete (a/b/d via 11-01; c via 11-02, 2026-04-20) |
-| TEST-02 | Phase 12 | Pending |
+| TEST-02 | Phase 12 | Complete (12-01, 2026-04-20) |
 | POLISH-01 | Phase 13 | Pending |
 | POLISH-02 | Phase 13 | Pending |
 | POLISH-03 | Phase 13 | Pending |
