@@ -316,6 +316,23 @@ func populateFromRollout(cfg *provider.PluginConfig, rollout *v1alpha1.Rollout, 
 		return
 	}
 
+	// IN-02: defend against the pathological "UID set, Name empty" input.
+	// kube-apiserver rejects OwnerReferences with empty Name (owner_references.go
+	// validation). Fail-fast here with a log trail is cheaper than surfacing
+	// the validation error from a downstream Create call. Per IN-02 from
+	// 08.1-REVIEW.md. Namespace fall-through is orthogonal to owner-ref
+	// semantics and is preserved.
+	if rollout.UID != "" && rollout.Name == "" {
+		slog.Warn("rollout has UID but empty Name; skipping RolloutUID population",
+			"rolloutUID", string(rollout.UID),
+			"phase", phase,
+		)
+		if cfg.Namespace == "" {
+			cfg.Namespace = rollout.Namespace
+		}
+		return
+	}
+
 	cfg.RolloutName = rollout.Name
 	cfg.RolloutUID = string(rollout.UID)
 	if cfg.Namespace == "" {

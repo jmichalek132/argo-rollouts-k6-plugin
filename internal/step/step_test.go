@@ -209,6 +209,46 @@ func TestRun_PopulatesCfgFromRollout(t *testing.T) {
 	assert.Equal(t, "", gotCfg.AnalysisRunUID, "step plugin must not set AnalysisRunUID")
 }
 
+// TestPopulateFromRollout_EmptyNameWithUID exercises the IN-02 defensive
+// branch: rollout.UID is set but rollout.Name is empty. Asserts the plugin
+// does NOT populate RolloutName or RolloutUID (the pathological input is
+// rejected fail-fast). Namespace fall-through is preserved because it is
+// orthogonal to owner-ref semantics. Happy-path tests
+// (TestRun_PopulatesCfgFromRollout) continue to cover the Name+UID case.
+func TestPopulateFromRollout_EmptyNameWithUID(t *testing.T) {
+	var gotCfg *provider.PluginConfig
+	mock := &mockProvider{
+		TriggerRunFn: func(_ context.Context, cfg *provider.PluginConfig) (string, error) {
+			gotCfg = cfg
+			return "run-1", nil
+		},
+		GetRunResultFn: func(_ context.Context, _ *provider.PluginConfig, _ string) (*provider.RunResult, error) {
+			return &provider.RunResult{
+				State:      provider.Running,
+				TestRunURL: "https://app.k6.io/runs/run-1",
+			}, nil
+		},
+	}
+	rollout := &v1alpha1.Rollout{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "", // deliberately empty -- IN-02 pathological input
+			Namespace: "ns-prod",
+			UID:       k8stypes.UID("rollout-uid-no-name"),
+		},
+	}
+	p := New(mock)
+	ctx := makeContext(makeConfig(nil), nil)
+	_, _ = p.Run(rollout, ctx)
+
+	require.NotNil(t, gotCfg, "TriggerRun should still be invoked (defense is in populate, not Run dispatch)")
+	assert.Equal(t, "", gotCfg.RolloutName,
+		"IN-02: empty rollout.Name must NOT populate cfg.RolloutName")
+	assert.Equal(t, "", gotCfg.RolloutUID,
+		"IN-02: empty rollout.Name must NOT populate cfg.RolloutUID")
+	assert.Equal(t, "ns-prod", gotCfg.Namespace,
+		"Namespace fall-through is orthogonal to owner-ref semantics and should still apply")
+}
+
 func TestRun_UserNamespaceWinsOverRollout(t *testing.T) {
 	var gotCfg *provider.PluginConfig
 	mock := &mockProvider{
