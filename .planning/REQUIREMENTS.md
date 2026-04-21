@@ -28,12 +28,12 @@ Three requirement groups, each mapped to roadmap phases.
 
 ### Polish (Opportunistic cleanup)
 
-- [ ] **POLISH-01**: `buildTestRun` Godoc consolidation — merge the three accumulated doc blocks (original + 08.2 parallelism + 08.3 cleanup rationale) into a single coherent block; move detailed rationale into a separate `// Design notes` section below the signature or into a sibling `doc.go`.
-- [ ] **POLISH-02**: Extract `dumpK6OperatorDiagnostics` in `e2e/k6_operator_test.go` (~35 lines of repeated `exec.Command("kubectl", ...).Output()` calls) into a declarative helper taking a list of `{resource, namespace, format}` tuples. Single append point for future dumps.
-- [ ] **POLISH-03**: Resolve 3 INFO items from 08.1-REVIEW.md:
-  - IN-01: Ambiguous warning message at `metric.go:246-249` when AR has non-controller Rollout owner ref — rephrase for operator clarity.
-  - IN-02: `populateFromRollout` at `step.go:261-274` does not defend against empty `rollout.Name` when `rollout.UID` is set — add a defensive check with a slog.Warn + skip (kube-apiserver would reject anyway, but fail-fast is cheaper).
-  - IN-03: `TestTriggerRun_WithRolloutUID` at `operator_test.go:347-379` does not lock `Controller`/`BlockOwnerDeletion` nil state — add explicit assertions.
+- [x] **POLISH-01**: `buildTestRun` Godoc consolidation — merge the three accumulated doc blocks (original + 08.2 parallelism + 08.3 cleanup rationale) into a single coherent block; move detailed rationale into a separate `// Design notes` section below the signature or into a sibling `doc.go`. **Complete 2026-04-20 (13-01) — colocated // Design notes block chosen over sibling doc.go.**
+- [x] **POLISH-02**: Extract `dumpK6OperatorDiagnostics` in `e2e/k6_operator_test.go` (~35 lines of repeated `exec.Command("kubectl", ...).Output()` calls) into a declarative helper taking a list of `{resource, namespace, format}` tuples. Single append point for future dumps. **Complete 2026-04-20 (13-01) — `k6DiagDump` struct + `emitK6Dump` helper drive 5 get-shaped dumps; controller-logs stay explicit; output byte-identical.**
+- [x] **POLISH-03**: Resolve 3 INFO items from 08.1-REVIEW.md: **Complete 2026-04-20 (13-01) — all 3 items closed.**
+  - [x] IN-01: Ambiguous warning message at `metric.go:246-249` when AR has non-controller Rollout owner ref — rephrase for operator clarity. **Split into zero-refs vs N-refs-no-controller branches; `ownerRefCount` slog field added.**
+  - [x] IN-02: `populateFromRollout` at `step.go:261-274` does not defend against empty `rollout.Name` when `rollout.UID` is set — add a defensive check with a slog.Warn + skip (kube-apiserver would reject anyway, but fail-fast is cheaper). **Defensive branch added; Namespace fall-through preserved.**
+  - [x] IN-03: `TestTriggerRun_WithRolloutUID` at `operator_test.go:347-379` does not lock `Controller`/`BlockOwnerDeletion` nil state — add explicit assertions. **`assert.Nil` added across all 3 owner-ref tests (AR, Rollout, AR-wins-over-Rollout).**
 
 ## Future Requirements
 
@@ -78,9 +78,9 @@ Which phases cover which requirements. Populated by gsd-roadmapper.
 | GC-03 | Phase 11 | Complete (11-01 metric-side + 11-02 step-side, 2026-04-20) |
 | GC-04 | Phase 11 | Complete (a/b/d via 11-01; c via 11-02, 2026-04-20) |
 | TEST-02 | Phase 12 | Complete (12-01, 2026-04-20) |
-| POLISH-01 | Phase 13 | Pending |
-| POLISH-02 | Phase 13 | Pending |
-| POLISH-03 | Phase 13 | Pending |
+| POLISH-01 | Phase 13 | Complete (13-01, 2026-04-20) |
+| POLISH-02 | Phase 13 | Complete (13-01, 2026-04-20) |
+| POLISH-03 | Phase 13 | Complete (13-01, 2026-04-20) |
 
 **Coverage:**
 - v0.4.0 requirements: 8 total

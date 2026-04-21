@@ -9,7 +9,7 @@ Two Argo Rollouts plugin binaries (metric + step) that gate canary and blue-gree
 - ✅ **v1.0 MVP** — Phases 1-4 (shipped 2026-04-14)
 - ✅ **v0.2.0 Hardening** — Phases 5-6 (shipped 2026-04-15)
 - ✅ **v0.3.0 In-Cluster Execution** — Phases 7-10 + decimals 08.1/08.2/08.3 (shipped 2026-04-20)
-- 🚧 **v0.4.0 Cleanup** — Phases 11-13 (in progress)
+- ✅ **v0.4.0 Cleanup** — Phases 11-13 (shipped 2026-04-20)
 
 ## Phases
 
@@ -50,11 +50,11 @@ Full details: [milestones/v0.3.0-ROADMAP.md](milestones/v0.3.0-ROADMAP.md)
 
 </details>
 
-### 🚧 v0.4.0 Cleanup (In Progress)
+### ✅ v0.4.0 Cleanup (Shipped 2026-04-20)
 
 - [x] **Phase 11: Success-path TestRun cleanup** — metric plugin `GarbageCollect` + symmetric step plugin terminal-state hook delete k6-operator TestRun CRs created during successful analysis/step runs (GC-01, GC-02, GC-03, GC-04) — **completed 2026-04-20**
 - [x] **Phase 12: Combined canary e2e + owner-ref GC cascade** — new e2e `TestK6OperatorCombinedCanaryARDeletion` proves D-07 owner-ref precedence under real kube-apiserver garbage collection (TEST-02) — **completed 2026-04-20**
-- [ ] **Phase 13: Opportunistic polish** — `buildTestRun` Godoc consolidation, `dumpK6OperatorDiagnostics` helper extraction, 3 INFO items from 08.1-REVIEW.md (POLISH-01, POLISH-02, POLISH-03)
+- [x] **Phase 13: Opportunistic polish** — `buildTestRun` Godoc consolidation, `dumpK6OperatorDiagnostics` helper extraction, 3 INFO items from 08.1-REVIEW.md (POLISH-01, POLISH-02, POLISH-03) — **completed 2026-04-20**
 
 ## Phase Details
 
@@ -96,8 +96,8 @@ Full details: [milestones/v0.3.0-ROADMAP.md](milestones/v0.3.0-ROADMAP.md)
   3. IN-01 (`metric.go:246-249`) warning distinguishes "no refs" vs "refs present without controller Rollout" and includes `ownerRefCount`.
   4. IN-02 (`step.go:261-274`) `populateFromRollout` warns + skips `RolloutUID` when `rollout.Name == ""`.
   5. IN-03 (`operator_test.go:347-379`) test locks `Controller` and `BlockOwnerDeletion` nil state on the emitted Rollout ref (and parallel assertions on AR-ref and AR-wins-over-Rollout tests).
-**Plans**: TBD
-  - [ ] 13-01-PLAN.md -- Consolidate buildTestRun Godoc, extract declarative `dumpK6OperatorDiagnostics` helper, resolve IN-01/IN-02/IN-03 (all small edits in 3 files: `testrun.go`, `e2e/k6_operator_test.go`, `metric.go`/`step.go`/`operator_test.go`)
+**Plans**: 1/1 complete
+  - [x] 13-01-PLAN.md -- Consolidate buildTestRun Godoc, extract declarative `dumpK6OperatorDiagnostics` helper, resolve IN-01/IN-02/IN-03 (small edits in 7 files: `testrun.go`, `e2e/k6_operator_test.go`, `metric.go`/`metric_test.go`, `step.go`/`step_test.go`, `operator_test.go`) — **completed 2026-04-20** ([13-01-SUMMARY.md](./phases/13-opportunistic-polish/13-01-SUMMARY.md))
 
 ## Next Milestone
 
@@ -112,7 +112,7 @@ Run `/gsd-new-milestone` to start planning the next milestone.
 | v1.0 MVP | 1-4 | 9/9 | Complete | 2026-04-14 |
 | v0.2.0 Hardening | 5-6 | 2/2 | Complete | 2026-04-15 |
 | v0.3.0 In-Cluster Execution | 7-10 + 08.1/08.2/08.3 | 13/13 | Complete | 2026-04-20 |
-| v0.4.0 Cleanup | 11-13 | 3/4 | In progress | - |
+| v0.4.0 Cleanup | 11-13 | 4/4 | Complete | 2026-04-20 |
 
 ### v0.4.0 Phase Progress
 
@@ -120,4 +120,4 @@ Run `/gsd-new-milestone` to start planning the next milestone.
 |-------|----------------|--------|-----------|
 | 11. Success-path TestRun cleanup | 2/2 | Complete | 2026-04-20 |
 | 12. Combined canary e2e + owner-ref GC cascade | 1/1 | Complete | 2026-04-20 |
-| 13. Opportunistic polish | 0/1 | Not started | - |
+| 13. Opportunistic polish | 1/1 | Complete | 2026-04-20 |

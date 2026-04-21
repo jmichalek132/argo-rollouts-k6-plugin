@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.4.0
 milestone_name: Cleanup
-status: executing
-stopped_at: Phase 12 complete (1/1 plan) -- combined-canary e2e landed green; D-07 owner-ref precedence proven under real kube cascade GC
-last_updated: "2026-04-20T16:56:00Z"
-last_activity: 2026-04-20 -- Phase 12 plan 12-01 complete (TestK6OperatorCombinedCanaryARDeletion + 4 helpers + 2 testdata fixtures; 7/7 e2e PASS incl new 43.28s; lint green; zero internal/ changes). Phase 12 now 1/1 plan done. Next: Phase 13 opportunistic polish.
+status: complete
+stopped_at: Milestone v0.4.0 Cleanup COMPLETE (3/3 phases, 4/4 plans) -- Phase 13 polish shipped; buildTestRun Godoc consolidated, dumpK6OperatorDiagnostics declarative helper, 08.1-REVIEW IN-01/IN-02/IN-03 closed
+last_updated: "2026-04-20T15:26:00Z"
+last_activity: 2026-04-20 -- Phase 13 plan 13-01 complete (POLISH-01/02/03; 7 files; 6 commits; 258 tests PASS; lint 0 issues; e2e compiles). Milestone v0.4.0 now 4/4 plans done.
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -21,36 +21,37 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** Rollouts automatically pass or roll back based on real load test results -- no manual gates, no guesswork.
-**Current focus:** Phase 12 complete. D-07 owner-ref precedence (AR > Rollout) now has both unit-level (Phase 08.1) and e2e-level (12-01) coverage against real kube-apiserver cascading GC. Next: Phase 13 opportunistic polish (POLISH-01/02/03).
+**Current focus:** Milestone v0.4.0 Cleanup COMPLETE (3/3 phases, 4/4 plans). Phase 13 polish shipped today: buildTestRun Godoc consolidation, dumpK6OperatorDiagnostics declarative helper, and all three 08.1-REVIEW IN-01/IN-02/IN-03 items closed. Next: v0.5.0 (likely Kubernetes Job provider per ROADMAP.md).
 
 ## Current Position
 
-Milestone: v0.4.0 Cleanup
-Phase: 12 (combined-canary-e2e-owner-ref-gc-cascade) — COMPLETE (1/1 plan)
-Plan: All plans done. Next phase: 13 opportunistic polish.
-Status: Phase 12 complete. Ready to start Phase 13.
-Last activity: 2026-04-20 -- Plan 12-01 complete (commit 9819bf2)
+Milestone: v0.4.0 Cleanup — COMPLETE (3/3 phases, 4/4 plans)
+Phase: 13 (opportunistic-polish) — COMPLETE (1/1 plan)
+Plan: All plans done. Milestone complete. Next: v0.5.0 planning.
+Status: v0.4.0 complete. Ready for next milestone (/gsd-new-milestone).
+Last activity: 2026-04-20 -- Plan 13-01 complete (commits 0ef4c73..62c21aa; 6 commits across 7 files)
 
-Progress: [████████░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
-**Velocity (from v1.0 + v0.2.0 + v0.3.0 + v0.4.0 so far):**
+**Velocity (from v1.0 + v0.2.0 + v0.3.0 + v0.4.0):**
 
-- Total plans completed: 20
-- Average duration: ~4.7 min/plan
-- Total execution time: ~80 min
+- Total plans completed: 21
+- Average duration: ~4.5 min/plan
+- Total execution time: ~85 min
 
 **Recent Trend:**
 
-- Last 5 plans: 1min, 11min, 26min, 3min, 6min (12-01: 1 e2e test + 4 helpers + 2 testdata YAMLs; passed on first execution, no deviations)
-- Trend: Stable (12-01 at 6min — dominated by e2e wall-clock; the new test itself was 43s of the 324s suite runtime)
+- Last 5 plans: 11min, 26min, 3min, 6min, 5min (13-01: 3 tasks -> 6 commits; single Rule 3 deviation for goconst lint; 258 tests PASS; lint 0 issues)
+- Trend: Fast (13-01 at 5min — pure polish, low risk, mostly mechanical edits with one surprise lint finding resolved in-place)
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | 11-01 | 26 min | 3 | 11 |
 | 11-02 | 3 min | 2 | 2 |
 | 12-01 | 6 min | 1 | 3 |
+| 13-01 | 5 min | 3 | 7 |
 
 ## Accumulated Context
 
