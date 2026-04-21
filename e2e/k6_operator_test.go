@@ -316,7 +316,7 @@ func getTestRunParallelism(cfg *envconf.Config, namespace string) (string, error
 // those cover the plugin's application-layer cleanup path; this test covers the
 // kube-apiserver owner-reference cascade path. Both must hold independently.
 //
-// Budget: ~5 min (k6 duration 120s + polling + kube GC latency + teardown).
+// Budget: ~10 min (k6 duration 120s + stage=started wait + up to 5 min async kube GC + teardown).
 func TestK6OperatorCombinedCanaryARDeletion(t *testing.T) {
 	f := features.New("k6-operator combined canary AR deletion GC cascade").
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
@@ -420,39 +420,85 @@ spec:
 				t.Fatalf("timed out waiting for both TestRuns to reach stage=started: arStage=%q roStage=%q", arStage, roStage)
 			}
 
-			// (3) Discover the AR name and delete it. Capture the name
-			//     BEFORE the delete; the cascade poll in (4) filters by
-			//     this captured name so a potential Argo-recreated
-			//     background AR (reconcileBackgroundAnalysisRun) cannot
-			//     contaminate the assertion with a new AR-owned TestRun.
+			// (3) Discover the AR name + UID and delete it. Both are
+			//     captured BEFORE the delete:
+			//       - Name is used for the kubectl delete call.
+			//       - UID pins the cascade poll in (4) to THIS AR
+			//         instance; argo-rollouts reconciles a replacement
+			//         background AR under the SAME name shortly after
+			//         our delete (see rollout/analysis.go
+			//         reconcileBackgroundAnalysisRun +
+			//         needsNewAnalysisRun(nil)==true in
+			//         argo-rollouts@v1.9.0). Without UID filtering the
+			//         poll would falsely count the new AR's TestRun.
+			//
+			//     Propagation policy note: the emitted AR->TestRun
+			//     OwnerReference carries Controller=nil and
+			//     BlockOwnerDeletion=nil (locked by Phase 13 IN-03 unit
+			//     tests; best-effort cleanup contract). Under that shape
+			//     --cascade=foreground is a NO-OP: the apiserver only
+			//     synchronously blocks on dependents whose
+			//     blockOwnerDeletion=true, and with none present the
+			//     foregroundDeletion finalizer is removed immediately
+			//     and dependents fall through to the async
+			//     kube-controller-manager GC loop -- identical to
+			//     --cascade=background. We therefore use the default
+			//     (background) propagation and rely on a generous
+			//     deadline in (4) to absorb GC-controller latency on
+			//     resource-starved kind hosts. See
+			//     .planning/debug/combined-canary-cascade-gc.md for the
+			//     full reasoning (including two prior false-positive
+			//     fixes: one that assumed --cascade=foreground was
+			//     load-bearing, and one that merely extended the
+			//     deadline without accounting for AR recreation).
 			ars, err := listAnalysisRuns(cfg, cfg.Namespace())
 			if err != nil || len(ars) == 0 {
 				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
 				t.Fatalf("no AnalysisRun found to delete: err=%v ars=%v", err, ars)
 			}
 			arName := ars[0]
+			arUID, err := getAnalysisRunUID(cfg, arName, cfg.Namespace())
+			if err != nil || arUID == "" {
+				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
+				t.Fatalf("read AnalysisRun UID for %s: err=%v uid=%q", arName, err, arUID)
+			}
 			if err := runKubectl(cfg, "delete", "analysisrun", arName,
 				"-n", cfg.Namespace(), "--ignore-not-found"); err != nil {
 				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
 				t.Fatalf("kubectl delete analysisrun %s: %v", arName, err)
 			}
 
-			// (4) Assert AR-owned TestRun disappears within 90s (kube
-			//     cascade GC). Filter cascade poll by the CAPTURED arName
-			//     so a recreated background AR's TestRun is not counted
-			//     as "still present".
-			cascadeDeadline := time.Now().Add(90 * time.Second)
+			// (4) Assert AR-owned TestRun disappears within 5 minutes
+			//     (async kube cascade GC). Filter cascade poll by the
+			//     CAPTURED arName so a recreated background AR's
+			//     TestRun is not counted as "still present". The 5m
+			//     deadline is deliberately generous: on loaded kind the
+			//     kube-controller-manager GC loop can take tens of
+			//     seconds to enumerate dependents after the AR tombstone
+			//     lands, and the TestRun itself owns runner Jobs/Pods
+			//     that kube must remove before the TestRun's own delete
+			//     completes. Poll interval 5s (not 3s) to cut apiserver
+			//     chatter over the longer window.
+			cascadeDeadline := time.Now().Add(5 * time.Minute)
 			var arRemaining []string
 			for time.Now().Before(cascadeDeadline) {
-				arRemaining, err = getTestRunsOwnedBy(cfg, cfg.Namespace(), "AnalysisRun", arName)
+				// UID filter is load-bearing: argo-rollouts recreates a
+				// deleted background AR with the SAME name but a NEW UID
+				// (see rollout/analysis.go reconcileBackgroundAnalysisRun
+				// + needsNewAnalysisRun(nil)==true in argo-rollouts
+				// v1.9.0). Name-only filtering matches the new AR's
+				// TestRun too, producing false "still present"
+				// assertions. UID pins the poll to the exact AR we
+				// deleted.
+				arRemaining, err = getTestRunsOwnedByUID(cfg, cfg.Namespace(), "AnalysisRun", arName, arUID)
 				if err == nil && len(arRemaining) == 0 {
 					break
 				}
-				time.Sleep(3 * time.Second)
+				time.Sleep(5 * time.Second)
 			}
 			if len(arRemaining) != 0 {
 				dumpK6OperatorDiagnostics(cfg, cfg.Namespace())
-				t.Fatalf("TestRun(s) owned by deleted AnalysisRun %q still present 90s after delete; kube cascade GC did not fire: %v", arName, arRemaining)
+				t.Fatalf("TestRun(s) owned by deleted AnalysisRun %q (uid=%s) still present 5m after delete; kube cascade GC did not fire: %v", arName, arUID, arRemaining)
 			}
 
 			// (5) Assert Rollout-owned TestRun survives. Short settle
@@ -508,6 +554,18 @@ spec:
 // case-sensitive on ownerKind -- use "AnalysisRun" or "Rollout" to mirror
 // the Kind strings parentOwnerRef emits in internal/provider/operator/testrun.go.
 func getTestRunsOwnedBy(cfg *envconf.Config, namespace, ownerKind, ownerName string) ([]string, error) {
+	return getTestRunsOwnedByUID(cfg, namespace, ownerKind, ownerName, "")
+}
+
+// getTestRunsOwnedByUID is the UID-aware variant of getTestRunsOwnedBy. When
+// ownerUID is non-empty, only TestRuns whose ownerRef.UID matches exactly are
+// returned. This is the correct filter for cascade-GC assertions: argo-rollouts
+// recreates a deleted background AnalysisRun with the SAME name but a NEW UID
+// (see reconcileBackgroundAnalysisRun + needsNewAnalysisRun(nil) => true in
+// argo-rollouts@v1.9.0 rollout/analysis.go), so name-based filtering would
+// match the new AR's TestRun and produce a false "still present" assertion.
+// UID is stable across recreations; the old AR's UID never reappears.
+func getTestRunsOwnedByUID(cfg *envconf.Config, namespace, ownerKind, ownerName, ownerUID string) ([]string, error) {
 	cmd := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
 		"get", "testruns", "-n", namespace, "-o", "json")
 	out, err := cmd.Output()
@@ -521,6 +579,7 @@ func getTestRunsOwnedBy(cfg *envconf.Config, namespace, ownerKind, ownerName str
 				OwnerReferences []struct {
 					Kind string `json:"kind"`
 					Name string `json:"name"`
+					UID  string `json:"uid"`
 				} `json:"ownerReferences"`
 			} `json:"metadata"`
 		} `json:"items"`
@@ -535,6 +594,9 @@ func getTestRunsOwnedBy(cfg *envconf.Config, namespace, ownerKind, ownerName str
 				continue
 			}
 			if ownerName != "" && ref.Name != ownerName {
+				continue
+			}
+			if ownerUID != "" && ref.UID != ownerUID {
 				continue
 			}
 			names = append(names, item.Metadata.Name)
@@ -572,6 +634,21 @@ func listAnalysisRuns(cfg *envconf.Config, namespace string) ([]string, error) {
 		return nil, err
 	}
 	return strings.Fields(string(out)), nil
+}
+
+// getAnalysisRunUID returns the metadata.uid of a named AnalysisRun. Used by
+// TestK6OperatorCombinedCanaryARDeletion to pin the cascade poll to the exact
+// AR instance being deleted, so a subsequently-recreated background AR (same
+// name, new UID) cannot appear as a false "still present" TestRun.
+func getAnalysisRunUID(cfg *envconf.Config, name, namespace string) (string, error) {
+	cmd := exec.Command("kubectl", "--kubeconfig", cfg.KubeconfigFile(),
+		"get", "analysisrun", name, "-n", namespace,
+		"-o", "jsonpath={.metadata.uid}")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // getTestRunLabel returns the value of a named label on a TestRun CR.
